@@ -63,4 +63,4 @@ lib/ctf.py
 modokicraft_scripts/
 EOL
 
-DOC/
+DOC/*.db
