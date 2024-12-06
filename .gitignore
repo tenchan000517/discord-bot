@@ -1,0 +1,66 @@
+cat > .gitignore << 'EOL'
+# Environment variables
+.env
+
+# AWS Keys and Credentials
+*.pem
+*_accessKeys.csv
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+ENV/
+
+# OS specific
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE specific
+.idea/
+.vscode/
+*.swp
+*.swo
+.un~
+
+# Custom directories
+mp3/
+other/
+version/
+.github/
+
+# Config files
+config.ini
+
+# Specific files to exclude
+lib/ctf.py
+modokicraft_scripts/
+EOL
+
+DOC/
