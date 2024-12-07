@@ -119,3 +119,53 @@ class AWSDatabase:
         except Exception as e:
             print(f"Error getting user gacha history: {e}")
             return []
+        
+    def get_latest_fortune(self, user_id, server_id):
+        """ユーザーの最新の占い結果を取得"""
+        try:
+            pk = self._create_pk(user_id, server_id)
+            response = self.history_table.query(
+                KeyConditionExpression=Key('pk').eq(pk),
+                FilterExpression=Attr('fortune_type').exists(),
+                ScanIndexForward=False,  # 新しい順
+                Limit=1
+            )
+            items = response.get('Items', [])
+            return items[0] if items else None
+        except Exception as e:
+            print(f"Error getting latest fortune: {e}")
+            return None
+
+    def record_fortune(self, user_id, server_id, fortune_type):
+        """占い結果を記録"""
+        try:
+            pk = self._create_pk(user_id, server_id)
+            self.history_table.put_item(
+                Item={
+                    'pk': pk,
+                    'timestamp': int(datetime.now().timestamp()),
+                    'user_id': str(user_id),
+                    'server_id': str(server_id),
+                    'fortune_type': fortune_type,
+                    'created_at': datetime.now(pytz.timezone('Asia/Tokyo')).isoformat()
+                }
+            )
+            return True
+        except Exception as e:
+            print(f"Error recording fortune: {e}")
+            return False
+
+    def get_fortune_history_stats(self, user_id, server_id, limit=30):
+        """ユーザーの占い履歴統計を取得"""
+        try:
+            pk = self._create_pk(user_id, server_id)
+            response = self.history_table.query(
+                KeyConditionExpression=Key('pk').eq(pk),
+                FilterExpression=Attr('fortune_type').exists(),
+                ScanIndexForward=False,
+                Limit=limit
+            )
+            return response.get('Items', [])
+        except Exception as e:
+            print(f"Error getting fortune history stats: {e}")
+            return []
