@@ -1,4 +1,3 @@
-# main.py
 import discord
 from discord.ext import commands
 from discord import app_commands
@@ -6,7 +5,6 @@ import asyncio
 import os
 from dotenv import load_dotenv
 from utils.aws_database import AWSDatabase
-from utils.settings_manager import ServerSettingsManager
 import traceback
 
 load_dotenv()
@@ -32,8 +30,7 @@ class GachaBot(commands.Bot):
         # データベース接続試行
         try:
             self.db = AWSDatabase()
-            self.settings_manager = ServerSettingsManager(self.db)
-            print("Database and Settings Manager initialized successfully")
+            print("Database initialized successfully")
             self.db_available = True
         except Exception as e:
             print(f"Failed to initialize database: {e}")
@@ -43,33 +40,42 @@ class GachaBot(commands.Bot):
     async def setup_hook(self):
         extension_status = []
         try:
-            # 管理コマンドを読み込み
+            # ガチャ機能を読み込み
             try:
-                await self.load_extension('cogs.admin')
-                print("Loaded admin extension")
-                extension_status.append("Admin: ✅")
+                await self.load_extension('cogs.gacha')
+                print("Loaded gacha extension")
+                extension_status.append("Gacha: ✅")
             except Exception as e:
-                print(f"Failed to load admin extension: {e}")
+                print(f"Failed to load gacha extension: {e}")
                 print(traceback.format_exc())
-                extension_status.append("Admin: ❌")
+                extension_status.append("Gacha: ❌")
 
-            # 既存の拡張機能を読み込み
-            for ext in ['gacha', 'fortunes', 'battle']:
-                try:
-                    await self.load_extension(f'cogs.{ext}')
-                    print(f"Loaded {ext} extension")
-                    extension_status.append(f"{ext.capitalize()}: ✅")
-                except Exception as e:
-                    print(f"Failed to load {ext} extension: {e}")
-                    print(traceback.format_exc())
-                    extension_status.append(f"{ext.capitalize()}: ❌")
+            # 占い機能を読み込み
+            try:
+                await self.load_extension('cogs.fortunes')
+                print("Loaded fortunes extension")
+                extension_status.append("Fortunes: ✅")
+            except Exception as e:
+                print(f"Failed to load fortunes extension: {e}")
+                print(traceback.format_exc())
+                extension_status.append("Fortunes: ❌")
+
+            # バトルロイヤル機能を読み込み
+            try:
+                await self.load_extension('cogs.battle')
+                print("Loaded battle extension")
+                extension_status.append("Battle: ✅")
+            except Exception as e:
+                print(f"Failed to load battle extension: {e}")
+                print(traceback.format_exc())
+                extension_status.append("Battle: ❌")
 
             print("Extension loading completed")
             print("\n".join(extension_status))
 
             # スラッシュコマンドを同期
             print("Starting global command sync...")
-            await self.tree.sync()
+            await self.tree.sync()  # グローバルコマンドの同期
             print("Command sync completed")
             
             commands = await self.tree.fetch_commands()
@@ -84,12 +90,6 @@ class GachaBot(commands.Bot):
         print(f'{self.user} has connected to Discord!')
         print(f'Bot is ready in {len(self.guilds)} servers.')
         print(f"Database status: {'Available' if self.db_available else 'Unavailable'}")
-
-    async def get_server_settings(self, guild_id: str):
-        """サーバー設定を取得するヘルパーメソッド"""
-        if not self.db_available:
-            return None
-        return await self.settings_manager.get_settings(str(guild_id))  # awaitを追加
 
 async def main():
     try:
