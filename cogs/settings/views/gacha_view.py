@@ -1,7 +1,7 @@
 import discord
 from .base import BaseSettingsView
 from ..modals.gacha_settings import GachaSettingsModal
-from ..modals.gacha_items import GachaItemsModal
+from ..modals.gacha_items import GachaItemsView
 
 class GachaSettingsView(BaseSettingsView):
     def __init__(self, bot, settings):
@@ -75,12 +75,17 @@ class GachaSettingsView(BaseSettingsView):
         row=0
     )
     async def items_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        """アイテム設定モーダルを表示"""
+        """アイテム設定画面を表示"""
         try:
-            modal = GachaItemsModal(self.settings, self.bot.settings_manager)
-            await interaction.response.send_modal(modal)
+            view = GachaItemsView(self.settings, self.bot.settings_manager)
+            await interaction.response.edit_message(
+                content="🎲 ガチャアイテム設定\n登録されているアイテムの編集や新規追加ができます。",
+                embed=None,  # 既存のembedをクリア
+                view=view
+            )
         except Exception as e:
             await self._handle_error(interaction, e)
+
 
     @discord.ui.button(
         label="戻る",
@@ -88,6 +93,7 @@ class GachaSettingsView(BaseSettingsView):
         custom_id="back_gacha",
         row=1
     )
+    
     async def back_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         """メイン設定画面に戻る"""
         from .settings_view import SettingsView

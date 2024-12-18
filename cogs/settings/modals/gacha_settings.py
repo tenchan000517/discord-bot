@@ -12,7 +12,7 @@ class GachaSettingsModal(BaseSettingsModal):
         self.default_messages = {
             'setup': 'ガチャへようこそ！\nここではさまざまなアイテムを獲得できます。',
             'daily': '{user}さんがガチャを引きました！',
-            'win': 'おめでとうございます！{user}さんが{item}を獲得しました！',
+            'win': 'おめでとうございます！{item}を獲得しました！',
             'custom_messages': {}
         }
         self.default_media = {

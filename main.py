@@ -29,6 +29,9 @@ class GachaBot(commands.Bot):
                 no_category='Commands'
             )
         )
+        # キャッシュの初期化
+        self.cache = {}
+        
         # データベース接続試行
         try:
             self.db = AWSDatabase()

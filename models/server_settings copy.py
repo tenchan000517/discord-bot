@@ -45,13 +45,11 @@ class MessageSettings:
 class MediaSettings:
     setup_image: Optional[str] = None
     banner_gif: Optional[str] = None
-    gacha_animation_gif: Optional[str] = None  # 新しく追加
 
     def to_dict(self):
         return {
             'setup_image': self.setup_image,
-            'banner_gif': self.banner_gif,
-            'gacha_animation_gif': self.gacha_animation_gif  # 追加
+            'banner_gif': self.banner_gif
         }
 
 @dataclass
@@ -62,7 +60,6 @@ class GachaFeatureSettings:
     points: List[PointDistribution] = None
     roles: List[RoleSettings] = None
     items: List[Dict] = None  # 既存のガチャアイテム設定を維持
-    use_daily_panel: bool = True  # 新しく追加
 
 @dataclass
 class BattleFeatureSettings:

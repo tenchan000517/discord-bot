@@ -59,7 +59,6 @@ class AWSDatabase:
             return False
 
     async def update_feature_settings(self, server_id: str, feature: str, settings: Dict) -> bool:
-        """特定の機能の設定のみを非同期で更新"""
         try:
             current_settings = await self.get_server_settings(server_id)
             if not current_settings:
@@ -69,8 +68,18 @@ class AWSDatabase:
             if 'feature_settings' not in current_settings:
                 current_settings['feature_settings'] = {}
 
-            # 特定の機能の設定を更新
-            current_settings['feature_settings'][feature] = settings
+            # ガチャ設定の場合、デフォルト値とマージ
+            if feature == 'gacha':
+                default_gacha = self._create_default_settings(server_id)['feature_settings']['gacha']
+                merged_settings = {
+                    **default_gacha,  # デフォルト値をベースに
+                    **settings,       # 新しい設定で上書き
+                    'messages': settings.get('messages', default_gacha['messages']),
+                    'media': settings.get('media', default_gacha['media'])
+                }
+                current_settings['feature_settings'][feature] = merged_settings
+            else:
+                current_settings['feature_settings'][feature] = settings
 
             return await self.update_server_settings(server_id, current_settings)
         except Exception as e:
@@ -139,24 +148,81 @@ class AWSDatabase:
             return []
 
     async def update_user_points(self, user_id: str, server_id: str, points: int, last_gacha_date: str) -> bool:
-        """ユーザーのポイントを非同期で更新"""
+        """既存メソッドを新しい構造に対応させる"""
         try:
+            return await self.update_feature_points(
+                user_id, 
+                server_id, 
+                'gacha', 
+                points, 
+                {'last_gacha_date': last_gacha_date}
+            )
+        except Exception as e:
+            print(f"Error in update_user_points: {e}")
+            return False
+
+    async def update_feature_points(self, user_id: str, server_id: str, feature: str, points: int, metadata: dict = None) -> bool:
+        """新しいポイント更新メソッド"""
+        try:
+            from decimal import Decimal
             pk = self._create_pk(user_id, server_id)
-            await asyncio.to_thread(
-                self.users_table.put_item,
-                Item={
+            
+            # 既存のデータを取得
+            current_data = await self.get_user_data(user_id, server_id)
+            if not current_data:
+                # 新規ユーザーの場合
+                current_data = {
                     'pk': pk,
                     'user_id': str(user_id),
                     'server_id': str(server_id),
-                    'points': points,
-                    'last_gacha_date': last_gacha_date,
+                    'points': {},
                     'updated_at': datetime.now(pytz.timezone('Asia/Tokyo')).isoformat()
                 }
+
+            # ポイントデータの初期化確認
+            if not isinstance(current_data.get('points'), dict):
+                current_data['points'] = {}
+
+            # 機能別ポイントの更新（Decimal型に変換）
+            current_data['points'][feature] = Decimal(str(points))
+            
+            # 合計ポイントの再計算
+            total = sum(
+                Decimal(str(v)) for k, v in current_data['points'].items() 
+                if k != 'total' and v is not None
+            )
+            current_data['points']['total'] = total
+
+            # メタデータの更新
+            if metadata:
+                current_data.update(metadata)
+
+            # 更新日時の設定
+            current_data['updated_at'] = datetime.now(pytz.timezone('Asia/Tokyo')).isoformat()
+
+            # データベースに保存
+            await asyncio.to_thread(
+                self.users_table.put_item,
+                Item=current_data
             )
             return True
         except Exception as e:
-            print(f"Error updating user points: {e}")
+            print(f"Error updating feature points: {e}")
             return False
+
+    async def get_user_points(self, user_id: str, server_id: str, feature: str = None):
+        """ユーザーのポイントを取得"""
+        try:
+            data = await self.get_user_data(user_id, server_id)
+            if not data or 'points' not in data:
+                return 0
+            
+            if feature:
+                return data['points'].get(feature, 0)
+            return data['points'].get('total', 0)
+        except Exception as e:
+            print(f"Error getting user points: {e}")
+            return 0
 
     @staticmethod
     def _create_pk(user_id: str, server_id: str) -> str:

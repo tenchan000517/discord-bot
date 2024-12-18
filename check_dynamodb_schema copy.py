@@ -16,36 +16,14 @@ def get_table_details(table_name: str, dynamodb) -> dict:
     
     return response['Table']
 
-def scan_table(dynamodb_table, limit=None):
-    """テーブルの全データを取得（ページネーション対応）"""
-    items = []
-    last_evaluated_key = None
-    while True:
-        if limit and len(items) >= limit:
-            break
-
-        scan_kwargs = {
-            "Limit": limit - len(items) if limit else None,
-        }
-        if last_evaluated_key:
-            scan_kwargs["ExclusiveStartKey"] = last_evaluated_key
-
-        response = dynamodb_table.scan(**{k: v for k, v in scan_kwargs.items() if v is not None})
-        items.extend(response.get('Items', []))
-        last_evaluated_key = response.get('LastEvaluatedKey', None)
-
-        if not last_evaluated_key:
-            break
-
-    return items[:limit] if limit else items
-
-def get_table_items(table_name: str, dynamodb, limit: int = None) -> list:
+def get_table_items(table_name: str, dynamodb, limit: int = 5) -> list:
     """テーブルのデータを取得（最大 limit 件まで）"""
     table = dynamodb.Table(table_name)
-
-    # 全データ取得（ページネーション対応）
-    items = scan_table(table, limit)
-
+    
+    # データをスキャン
+    response = table.scan(Limit=limit)
+    items = response.get('Items', [])
+    
     return items
 
 def analyze_table_schema(table_details: dict) -> None:

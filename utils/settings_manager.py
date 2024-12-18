@@ -10,8 +10,8 @@ class ServerSettingsManager:
 
     async def get_settings(self, server_id: str) -> Optional[ServerSettings]:
         """サーバー設定を取得"""
-        if server_id in self.settings_cache:
-            return self.settings_cache[server_id]
+        # if server_id in self.settings_cache:
+        #     return self.settings_cache[server_id]
 
         settings_data = await self.db.get_server_settings(server_id)
         if not settings_data:
