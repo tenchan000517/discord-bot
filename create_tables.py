@@ -1,11 +1,27 @@
-# create_tables.py
+# create_automation_tables.py
 import boto3
 import os
+import time
 from dotenv import load_dotenv
+from botocore.exceptions import ClientError
 
 load_dotenv()
 
-def create_dynamodb_tables():
+def delete_table_if_exists(dynamodb, table_name):
+    try:
+        table = dynamodb.Table(table_name)
+        table.delete()
+        print(f"テーブル {table_name} の削除を開始しました...")
+        table.meta.client.get_waiter('table_not_exists').wait(TableName=table_name)
+        print(f"テーブル {table_name} を削除しました")
+        time.sleep(5)  # 削除完了後の安全待機
+    except ClientError as e:
+        if e.response['Error']['Code'] == 'ResourceNotFoundException':
+            print(f"テーブル {table_name} は存在しません")
+        else:
+            raise e
+
+def create_automation_tables():
     try:
         # DynamoDBクライアントの初期化
         dynamodb = boto3.resource('dynamodb',
@@ -14,82 +30,42 @@ def create_dynamodb_tables():
             aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY')
         )
 
-        # discord_usersテーブルの作成
-        users_table = dynamodb.create_table(
-            TableName='discord_users',
-            KeySchema=[
-                {
-                    'AttributeName': 'pk',
-                    'KeyType': 'HASH'
-                }
-            ],
-            AttributeDefinitions=[
-                {
-                    'AttributeName': 'pk',
-                    'AttributeType': 'S'
-                },
-                {
-                    'AttributeName': 'user_id',
-                    'AttributeType': 'S'
-                },
-                {
-                    'AttributeName': 'server_id',
-                    'AttributeType': 'S'
-                }
-            ],
-            GlobalSecondaryIndexes=[
-                {
-                    'IndexName': 'UserIndex',
-                    'KeySchema': [
-                        {
-                            'AttributeName': 'user_id',
-                            'KeyType': 'HASH'
-                        }
-                    ],
-                    'Projection': {
-                        'ProjectionType': 'ALL'
-                    }
-                },
-                {
-                    'IndexName': 'ServerIndex',
-                    'KeySchema': [
-                        {
-                            'AttributeName': 'server_id',
-                            'KeyType': 'HASH'
-                        }
-                    ],
-                    'Projection': {
-                        'ProjectionType': 'ALL'
-                    }
-                }
-            ],
-            BillingMode='PAY_PER_REQUEST'
-        )
+        # 既存のテーブルを削除
+        delete_table_if_exists(dynamodb, 'automation_rules')
+        delete_table_if_exists(dynamodb, 'automation_history')
 
-        # server_settingsテーブルの作成
-        settings_table = dynamodb.create_table(
-            TableName='server_settings',
+        # automation_rulesテーブルの作成
+        automation_rules_table = dynamodb.create_table(
+            TableName='automation_rules',
             KeySchema=[
                 {
                     'AttributeName': 'server_id',
                     'KeyType': 'HASH'
+                },
+                {
+                    'AttributeName': 'id',
+                    'KeyType': 'RANGE'
                 }
             ],
             AttributeDefinitions=[
                 {
                     'AttributeName': 'server_id',
                     'AttributeType': 'S'
+                },
+                {
+                    'AttributeName': 'id',
+                    'AttributeType': 'S'
                 }
             ],
             BillingMode='PAY_PER_REQUEST'
         )
 
-        # gacha_historyテーブルの作成
-        history_table = dynamodb.create_table(
-            TableName='gacha_history',
+        # automation_historyテーブルの作成
+        automation_history_table = dynamodb.create_table(
+            TableName='automation_history',
             KeySchema=[
                 {
-                    'AttributeName': 'pk',
+                    'AttributeName': 'server_id',
                     'KeyType': 'HASH'
                 },
                 {
@@ -99,24 +75,24 @@ def create_dynamodb_tables():
             ],
             AttributeDefinitions=[
                 {
-                    'AttributeName': 'pk',
+                    'AttributeName': 'server_id',
                     'AttributeType': 'S'
                 },
                 {
                     'AttributeName': 'timestamp',
-                    'AttributeType': 'N'
+                    'AttributeType': 'S'
                 },
                 {
-                    'AttributeName': 'server_id',
+                    'AttributeName': 'rule_id',
                     'AttributeType': 'S'
                 }
             ],
             GlobalSecondaryIndexes=[
                 {
-                    'IndexName': 'ServerTimeIndex',
+                    'IndexName': 'RuleIdIndex',
                     'KeySchema': [
                         {
-                            'AttributeName': 'server_id',
+                            'AttributeName': 'rule_id',
                             'KeyType': 'HASH'
                         },
                         {
@@ -132,15 +108,14 @@ def create_dynamodb_tables():
             BillingMode='PAY_PER_REQUEST'
         )
 
-        print("テーブル作成中...")
-        users_table.meta.client.get_waiter('table_exists').wait(TableName='discord_users')
-        settings_table.meta.client.get_waiter('table_exists').wait(TableName='server_settings')
-        history_table.meta.client.get_waiter('table_exists').wait(TableName='gacha_history')
-        print("テーブルの作成が完了しました！")
+        print("オートメーションテーブル作成中...")
+        automation_rules_table.meta.client.get_waiter('table_exists').wait(TableName='automation_rules')
+        automation_history_table.meta.client.get_waiter('table_exists').wait(TableName='automation_history')
+        print("オートメーションテーブルの作成が完了しました！")
 
     except Exception as e:
         print(f"エラーが発生しました: {e}")
-        raise e  # エラーを再度発生させて詳細を確認可能に
+        raise e
 
 if __name__ == "__main__":
-    create_dynamodb_tables()
+    create_automation_tables()

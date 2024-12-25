@@ -6,8 +6,10 @@ import {
     QueryCommand,
     ScanCommand,
     UpdateCommand,
-    PutCommand
+    PutCommand,
+    DeleteCommand  // 追加
 } from "@aws-sdk/lib-dynamodb";
+import { v4 as uuidv4 } from 'uuid';  // UUIDの生成に使用
 
 export class AWSWrapper {
     constructor() {
@@ -272,6 +274,236 @@ export class AWSWrapper {
             return response;
         } catch (error) {
             console.error("Error saving audit log:", error);
+            throw error;
+        }
+    }
+
+    // オートメーションルールの取得
+    async getAutomationRules(serverId) {
+        try {
+            const command = new QueryCommand({
+                TableName: 'automation_rules',
+                KeyConditionExpression: 'server_id = :serverId',
+                ExpressionAttributeValues: {
+                    ':serverId': serverId
+                }
+            });
+
+            const response = await this.docClient.send(command);
+            return response.Items || [];
+        } catch (error) {
+            console.error('Error getting automation rules:', error);
+            throw error;
+        }
+    }
+
+    // オートメーション履歴の取得
+    async getAutomationHistory(serverId, limit = 10) {
+        try {
+            const command = new QueryCommand({
+                TableName: 'automation_history',
+                KeyConditionExpression: 'server_id = :serverId',
+                ExpressionAttributeValues: {
+                    ':serverId': serverId
+                },
+                ScanIndexForward: false,  // 新しい順に取得
+                Limit: limit
+            });
+
+            const response = await this.docClient.send(command);
+            return response.Items || [];
+        } catch (error) {
+            console.error('Error getting automation history:', error);
+            throw error;
+        }
+    }
+
+    async updateAutomationRule(serverId, ruleId, updateData) {
+        try {
+            // updateDataが文字列の場合はJSONとしてパース
+            if (typeof updateData === 'string') {
+                updateData = JSON.parse(updateData);
+            }
+    
+            // 通知設定のバリデーション
+            if (updateData.notification) {
+                const { enabled, type, channelId, messageTemplate } = updateData.notification;
+                if (enabled) {
+                    if (type === 'channel' && !channelId) {
+                        throw new Error('通知チャンネルの指定が必要です');
+                    }
+                    if (!messageTemplate) {
+                        throw new Error('通知メッセージの設定が必要です');
+                    }
+                }
+            }
+    
+            console.log('Updating automation rule with:', { 
+                serverId, 
+                ruleId, 
+                updateData
+            });
+                      
+            // 複数ルールの一括更新の場合
+            if (updateData.rules) {
+                const bulkUpdates = await Promise.all(
+                    updateData.rules.map(async (rule) => {
+                        // 既存のルールデータを取得
+                        const existingRule = await this.docClient.send(new GetCommand({
+                            TableName: 'automation_rules',
+                            Key: {
+                                server_id: serverId,
+                                id: rule.id
+                            }
+                        }));
+    
+                        // 既存のデータとマージ
+                        const mergedRule = {
+                            ...(existingRule.Item || {}),
+                            ...rule,
+                            server_id: serverId,
+                            updated_at: new Date().toISOString()
+                        };
+    
+                        const command = new PutCommand({
+                            TableName: 'automation_rules',
+                            Item: mergedRule
+                        });
+    
+                        await this.docClient.send(command);
+                        return mergedRule;
+                    })
+                );
+    
+                return {
+                    success: true,
+                    message: '複数のルールを更新しました',
+                    rules: bulkUpdates
+                };
+            }
+    
+            // 単一ルールの更新の場合
+            if (!ruleId && !updateData.id) {
+                throw new Error('Rule ID is required for single rule update');
+            }
+    
+            const targetRuleId = ruleId || updateData.id;
+    
+            // 既存のルールを取得
+            const getCommand = new GetCommand({
+                TableName: 'automation_rules',
+                Key: {
+                    server_id: serverId,
+                    id: targetRuleId
+                }
+            });
+    
+            const existingRule = await this.docClient.send(getCommand);
+            
+            if (!existingRule.Item) {
+                throw new Error('Rule not found');
+            }
+    
+            // 更新データを既存のデータとマージ
+            const updatedRule = {
+                ...existingRule.Item,
+                ...updateData,
+                server_id: serverId,
+                id: targetRuleId,
+                updated_at: new Date().toISOString()
+            };
+    
+            // 更新を実行
+            const updateCommand = new PutCommand({
+                TableName: 'automation_rules',
+                Item: updatedRule
+            });
+    
+            await this.docClient.send(updateCommand);
+    
+            return {
+                success: true,
+                message: 'ルールを更新しました',
+                rule: updatedRule
+            };
+        } catch (error) {
+            console.error('Error in updateAutomationRule:', error);
+            throw new Error(`Failed to update automation rule: ${error.message}`);
+        }
+    }
+    
+    async createAutomationRule(serverId, ruleData) {
+        try {
+            const now = new Date().toISOString();
+            const rule = {
+                server_id: serverId,
+                id: ruleData.id || uuidv4(),
+                name: ruleData.name,
+                description: ruleData.description,
+                enabled: ruleData.enabled ?? true,
+                conditions: ruleData.conditions || [],
+                actions: ruleData.actions || [],
+                created_at: now,
+                updated_at: now
+            };
+    
+            const command = new PutCommand({
+                TableName: 'automation_rules',
+                Item: rule
+            });
+    
+            await this.docClient.send(command);
+            return {
+                success: true,
+                message: '新しいルールを作成しました',
+                rule
+            };
+        } catch (error) {
+            console.error('Error in createAutomationRule:', error);
+            throw new Error(`Failed to create automation rule: ${error.message}`);
+        }
+    }
+
+    // オートメーションルールの削除
+    async deleteAutomationRule(serverId, ruleId) {
+        try {
+            const command = new DeleteCommand({
+                TableName: 'automation_rules',
+                Key: {
+                    server_id: serverId,
+                    id: ruleId
+                }
+            });
+
+            await this.docClient.send(command);
+            return true;
+        } catch (error) {
+            console.error('Error deleting automation rule:', error);
+            throw error;
+        }
+    }
+
+    // オートメーション履歴の記録
+    async logAutomationExecution(serverId, ruleId, userId, success, details = null) {
+        try {
+            const historyEntry = {
+                server_id: serverId,
+                timestamp: new Date().toISOString(),
+                rule_id: ruleId,
+                user_id: userId,
+                success: success,
+                details: details
+            };
+
+            const command = new PutCommand({
+                TableName: 'automation_history',
+                Item: historyEntry
+            });
+
+            await this.docClient.send(command);
+            return historyEntry;
+        } catch (error) {
+            console.error('Error logging automation execution:', error);
             throw error;
         }
     }

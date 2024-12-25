@@ -18,6 +18,9 @@ class AWSDatabase:
         self.settings_table = self.dynamodb.Table('server_settings')
         self.history_table = self.dynamodb.Table('gacha_history')
 
+        self.automation_rules_table = self.dynamodb.Table('automation_rules')
+        self.automation_history_table = self.dynamodb.Table('automation_history')
+
     async def get_server_settings(self, server_id: str) -> Optional[Dict]:
         """サーバー設定を非同期で取得"""
         try:
@@ -240,4 +243,87 @@ class AWSDatabase:
             return response.get('Item')
         except Exception as e:
             print(f"Error getting user data: {e}")
+            return None
+        
+    async def get_automation_rules(self, server_id: str) -> List[Dict]:
+        """サーバーのオートメーションルールを非同期で取得"""
+        try:
+            response = await asyncio.to_thread(
+                self.automation_rules_table.query,
+                KeyConditionExpression=Key('server_id').eq(str(server_id))
+            )
+            return response.get('Items', [])
+        except Exception as e:
+            print(f"Error getting automation rules: {e}")
+            return []
+
+    async def save_automation_rule(self, rule_data: dict) -> bool:
+        """オートメーションルールを非同期で保存"""
+        try:
+            await asyncio.to_thread(
+                self.automation_rules_table.put_item,
+                Item=rule_data
+            )
+            return True
+        except Exception as e:
+            print(f"Error saving automation rule: {e}")
+            return False
+
+    async def delete_automation_rule(self, server_id: str, rule_id: str) -> bool:
+        """オートメーションルールを非同期で削除"""
+        try:
+            await asyncio.to_thread(
+                self.automation_rules_table.delete_item,
+                Key={
+                    'server_id': str(server_id),
+                    'rule_id': str(rule_id)
+                }
+            )
+            return True
+        except Exception as e:
+            print(f"Error deleting automation rule: {e}")
+            return False
+
+    async def save_automation_history(self, history_data: dict) -> bool:
+        """オートメーション実行履歴を非同期で保存"""
+        try:
+            # タイムスタンプをソートキーとして使用
+            history_data['timestamp'] = datetime.now(pytz.UTC).isoformat()
+            
+            await asyncio.to_thread(
+                self.automation_history_table.put_item,
+                Item=history_data
+            )
+            return True
+        except Exception as e:
+            print(f"Error saving automation history: {e}")
+            return False
+
+    async def get_automation_history(self, server_id: str, limit: int = 100) -> List[Dict]:
+        """サーバーのオートメーション実行履歴を非同期で取得"""
+        try:
+            response = await asyncio.to_thread(
+                self.automation_history_table.query,
+                KeyConditionExpression=Key('server_id').eq(str(server_id)),
+                Limit=limit,
+                ScanIndexForward=False  # 最新のものから取得
+            )
+            return response.get('Items', [])
+        except Exception as e:
+            print(f"Error getting automation history: {e}")
+            return []
+
+    async def get_automation_rule(self, server_id: str, rule_id: str) -> Optional[Dict]:
+        """特定のオートメーションルールを非同期で取得"""
+        try:
+            response = await asyncio.to_thread(
+                self.automation_rules_table.get_item,
+                Key={
+                    'server_id': str(server_id),
+                    'rule_id': str(rule_id)
+                }
+            )
+            return response.get('Item')
+        except Exception as e:
+            print(f"Error getting automation rule: {e}")
             return None

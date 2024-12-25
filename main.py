@@ -7,6 +7,8 @@ import os
 from dotenv import load_dotenv
 from utils.aws_database import AWSDatabase
 from utils.settings_manager import ServerSettingsManager
+from utils.point_manager import PointManager
+
 import traceback
 
 load_dotenv()
@@ -36,6 +38,8 @@ class GachaBot(commands.Bot):
         try:
             self.db = AWSDatabase()
             self.settings_manager = ServerSettingsManager(self.db)
+            self.point_manager = PointManager(self) # 追加
+
             print("Database and Settings Manager initialized successfully")
             self.db_available = True
         except Exception as e:
@@ -57,7 +61,7 @@ class GachaBot(commands.Bot):
                 extension_status.append("Admin: ❌")
 
             # 既存の拡張機能を読み込み
-            for ext in ['gacha', 'fortunes', 'battle']:
+            for ext in ['gacha', 'fortunes', 'battle', 'automation']:  # automationを追加
                 try:
                     await self.load_extension(f'cogs.{ext}')
                     print(f"Loaded {ext} extension")

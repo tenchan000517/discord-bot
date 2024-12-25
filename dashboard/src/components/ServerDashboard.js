@@ -2,137 +2,13 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSession, signIn } from 'next-auth/react';
-import { EditableFeatureCard } from './EditableFeatureCard';
-import { ServerSettingsForm } from './EditForms/ServerSettingsForm';
-import { BattleSettingsForm } from './EditForms/BattleSettingsForm';
-import { GachaSettingsForm } from './EditForms/GachaSettingsForm';
-import { FortuneSettingsForm } from './EditForms/FortuneSettingsForm';
-import { UserPointsForm } from './EditForms/UserPointsForm';
 import { Alert } from '@/components/ui/Alert';
-import { Tab } from '@headlessui/react';
 import { Search, History, Settings, ChevronDown, Trophy, Edit2 } from 'lucide-react';
 import CSVImportExport from './EditForms/CSVImportExport';
 
-const RankingList = ({ rankings, pointUnit, onUpdatePoints }) => {
-  const [editingUserId, setEditingUserId] = useState(null);
-
-  const handleSave = async (userId, newPoints) => {
-    await onUpdatePoints(userId, newPoints);
-    setEditingUserId(null);
-  };
-
-  return (
-    <div className="space-y-3">
-      {rankings.map((user, index) => (
-        editingUserId === user.user_id ? (
-          // 編集モード: 縦に展開
-          <div key={user.user_id} className="bg-white p-4 rounded-lg shadow-sm">
-            <div className="flex items-center gap-3 mb-4">
-              <span className="text-sm font-medium text-gray-500 w-8">#{index + 1}</span>
-              {user.avatar ? (
-                <img
-                  src={`https://cdn.discordapp.com/avatars/${user.user_id}/${user.avatar}.png`}
-                  alt={user.displayName}
-                  className="w-8 h-8 rounded-full"
-                />
-              ) : (
-                <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center">
-                  <span className="text-sm font-medium text-gray-600">
-                    {user.displayName?.[0]}
-                  </span>
-                </div>
-              )}
-              <span className="font-medium">{user.displayName}</span>
-            </div>
-            <UserPointsForm
-              user={user}
-              onSave={handleSave}
-              onCancel={() => setEditingUserId(null)}
-              pointUnit={pointUnit}
-            />
-          </div>
-        ) : (
-          // 通常モード: 1行表示
-          <div key={user.user_id} className="bg-white p-3 rounded-lg shadow-sm">
-            <div className="flex items-center">
-              <div className="flex items-center gap-3 min-w-0 flex-1">
-                <span className="text-sm font-medium text-gray-500 w-8">#{index + 1}</span>
-                {user.avatar ? (
-                  <img
-                    src={`https://cdn.discordapp.com/avatars/${user.user_id}/${user.avatar}.png`}
-                    alt={user.displayName}
-                    className="w-8 h-8 rounded-full flex-shrink-0"
-                  />
-                ) : (
-                  <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
-                    <span className="text-sm font-medium text-gray-600">
-                      {user.displayName?.[0]}
-                    </span>
-                  </div>
-                )}
-                <span className="font-medium truncate">
-                  {user.displayName}
-                </span>
-              </div>
-              <div className="flex items-center gap-2 flex-shrink-0 ml-4">
-                <span className="font-medium whitespace-nowrap">
-                  {(user.points?.total || 0).toLocaleString()} {pointUnit}
-                </span>
-                <button
-                  onClick={() => setEditingUserId(user.user_id)}
-                  className="p-1 text-gray-400 hover:text-gray-600"
-                >
-                  <Edit2 className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          </div>
-        )
-      ))}
-    </div>
-  );
-};
-
-const FeatureSettingsWrapper = ({ settings, pointUnit, onSubmit }) => {
-  const [formData, setFormData] = useState({
-    battle: settings.feature_settings.battle,
-    gacha: settings.feature_settings.gacha,
-    fortune: settings.feature_settings.fortune
-  });
-
-  useEffect(() => {
-    onSubmit({
-      ...settings,
-      feature_settings: formData
-    });
-  }, [formData, settings.server_id, settings.global_settings, onSubmit]);
-
-  const handleSettingsChange = (section, newData) => {
-    setFormData(prevData => ({
-      ...prevData,
-      [section]: newData
-    }));
-  };
-
-  return (
-    <div className="space-y-8">
-      <BattleSettingsForm
-        settings={formData.battle}
-        pointUnit={pointUnit}
-        onChange={(data) => handleSettingsChange('battle', data)}
-      />
-      <GachaSettingsForm
-        settings={formData.gacha}
-        pointUnit={pointUnit}
-        onChange={(data) => handleSettingsChange('gacha', data)}
-      />
-      <FortuneSettingsForm
-        settings={formData.fortune}
-        onChange={(data) => handleSettingsChange('fortune', data)}
-      />
-    </div>
-  );
-};
+import RankingList from './ServerDashboard/RankingList'; // 変更
+import ServerInfo from './ServerDashboard/ServerInfo'; // 追加
+import FeatureSettings from './ServerDashboard/FeatureSettings';
 
 const ServerDashboard = () => {
   const { data: session, status } = useSession();
@@ -144,9 +20,12 @@ const ServerDashboard = () => {
   const [editingSection, setEditingSection] = useState(null);
   const [saving, setSaving] = useState(false);
   const [featureData, setFeatureData] = useState(null);
-  const [searchQuery, setSearchQuery] = useState('');
   const [changeHistory, setChangeHistory] = useState([]);
-  const [selectedTab, setSelectedTab] = useState(0);
+
+  const [automationRules, setAutomationRules] = useState([]);
+  const [automationHistory, setAutomationHistory] = useState([]);
+
+  const [serverRoles, setServerRoles] = useState([]);
 
   const selectedServer = useMemo(
     () => servers.find(server => server.id === selectedServerId),
@@ -176,22 +55,57 @@ const ServerDashboard = () => {
   };
 
   const fetchServerData = useCallback(async (id) => {
-    if (!id) return;
+    if (!id || !session) return;
+
+    console.log('[3. Server ID Check] Fetching data for server ID:', id); // ログ追加
 
     try {
       setLoading(true);
-      const response = await fetch(`/api/servers/${id}`);
-      const data = await response.json();
+      const [serverResponse, automationResponse, rolesResponse, channelsResponse] = await Promise.all([
+        fetch(`/api/servers/${id}`),
+        fetch(`/api/servers/${id}/automation`),
+        fetch(`/api/servers/${id}/roles`),
+        fetch(`/api/servers/${id}/channels`)  // 追加
+      ]);
 
-      setServerData(data);
+      console.log('[5. Channel Response Check] Channels Response:', await channelsResponse.clone().json()); // ログ追加
+
+
+      // 認証エラーチェック
+      if (serverResponse.status === 401 ||
+        automationResponse.status === 401 ||
+        rolesResponse.status === 401 ||
+        channelsResponse.status === 401) {
+
+        signIn('discord');
+        return;
+      }
+
+      const serverData = await serverResponse.json();
+      const automationData = await automationResponse.json();
+      const rolesData = await rolesResponse.json();
+      const channelsData = await channelsResponse.json();  // 追加
+
+      // serverDataにチャンネル情報を追加
+      serverData.channels = channelsData.channels;
+
+      setServerData(serverData);
+      setAutomationRules(automationData.rules);
+      setAutomationHistory(automationData.history);
+      setServerRoles(rolesData.roles);
+
       setError(null);
     } catch (err) {
       setError('データの取得に失敗しました');
       console.error('Error fetching server data:', err);
+
+      if (err.message === 'Unauthorized' || err.message === '401: Unauthorized') {
+        signIn('discord');
+      }
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [session]);
 
   const handleUpdateSettings = useCallback(async (section, data) => {
     setSaving(true);
@@ -255,18 +169,94 @@ const ServerDashboard = () => {
     }
   };
 
+  const handleUpdateAutomationRule = async (ruleId, updateData) => {
+    console.log("[ServerDashboard] handleUpdateAutomationRule called with:", {
+      ruleId,
+      updateData,
+    });
+    try {
+      console.log('Updating automation rules with:', {
+        updateData,
+        server_id: selectedServerId
+      });
+
+      const payload = {
+        ...updateData,
+        server_id: selectedServerId,
+        ruleId: ruleId || null
+      };
+
+      const response = await fetch(`/api/servers/${selectedServerId}/automation`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || 'ルールの更新に失敗しました');
+      }
+
+      console.log("[ServerDashboard] Rule update success:", data);
+
+      await fetchServerData(selectedServerId);
+      return data;
+
+    } catch (error) {
+      console.error('Error updating automation rules:', error);
+      setError(error.message);
+      throw error;
+    }
+  };
+
   useEffect(() => {
     const fetchServers = async () => {
-      if (!session) return;
+      if (!session) {
+        // セッションがない場合は早期リターン
+        return;
+      }
 
       try {
         const response = await fetch('/api/servers/list');
+
+        if (response.status === 401) {
+          // エラーメッセージを設定
+          setError(
+            <div className="flex flex-col items-center gap-4">
+              <p>セッションの有効期限が切れました。再度ログインしてください。</p>
+              <button
+                onClick={() => signIn('discord')}
+                className="px-6 py-2 bg-[#5865F2] text-white rounded-lg hover:bg-[#4752C4] transition-colors flex items-center gap-2"
+              >
+                Discordでログイン
+              </button>
+            </div>
+          );
+          return;
+        }
+
         const data = await response.json();
         if (data.error) {
           throw new Error(data.error);
         }
         setServers(data.servers);
       } catch (err) {
+        if (err.message === 'Unauthorized' || err.message === '401: Unauthorized') {
+          setError(
+            <div className="flex flex-col items-center gap-4">
+              <p>認証に失敗しました。再度ログインしてください。</p>
+              <button
+                onClick={() => signIn('discord')}
+                className="px-6 py-2 bg-[#5865F2] text-white rounded-lg hover:bg-[#4752C4] transition-colors flex items-center gap-2"
+              >
+                Discordでログイン
+              </button>
+            </div>
+          );
+          return;
+        }
         setError('サーバー一覧の取得に失敗しました');
         console.error('Error fetching servers:', err);
       }
@@ -276,267 +266,6 @@ const ServerDashboard = () => {
       fetchServers();
     }
   }, [session]);
-
-  const ServerInfo = useMemo(() => {
-    if (!serverData || !selectedServer) return null;
-
-    return (
-      <EditableFeatureCard
-        title="サーバー情報"
-        isEditing={editingSection === 'server-settings'}
-        onEditToggle={() => setEditingSection(editingSection === 'server-settings' ? null : 'server-settings')}
-        onSave={(data) => handleUpdateSettings('server-settings', data)}
-        editForm={
-          <ServerSettingsForm
-            settings={serverData.settings}
-            onSubmit={(data) => handleUpdateSettings('server-settings', data)}
-          />
-        }
-      >
-        <div className="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow">
-          <div className="flex items-center gap-6 mb-8">
-            {selectedServer.icon ? (
-              <img
-                src={`https://cdn.discordapp.com/icons/${selectedServerId}/${selectedServer.icon}.png`}
-                alt="Server Icon"
-                className="w-20 h-20 rounded-full ring-2 ring-gray-100"
-              />
-            ) : (
-              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center">
-                <span className="text-3xl text-white font-medium">
-                  {selectedServer.name.charAt(0)}
-                </span>
-              </div>
-            )}
-            <div>
-              <h3 className="text-2xl font-bold mb-1">{selectedServer.name}</h3>
-              <p className="text-gray-500">ID: {serverData.settings.server_id}</p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="bg-gray-50 rounded-lg p-4">
-              <h4 className="text-sm font-medium text-gray-500 mb-2">ポイント単位</h4>
-              <p className="text-lg font-medium">{serverData.settings.global_settings.point_unit}</p>
-            </div>
-            <div className="bg-gray-50 rounded-lg p-4">
-              <h4 className="text-sm font-medium text-gray-500 mb-2">タイムゾーン</h4>
-              <p className="text-lg font-medium">{serverData.settings.global_settings.timezone}</p>
-            </div>
-            <div className="bg-gray-50 rounded-lg p-4">
-              <h4 className="text-sm font-medium text-gray-500 mb-2">言語</h4>
-              <p className="text-lg font-medium">{serverData.settings.global_settings.language}</p>
-            </div>
-          </div>
-        </div>
-      </EditableFeatureCard>
-    );
-  }, [serverData, selectedServer, selectedServerId, editingSection, handleUpdateSettings]);
-
-  const FeatureSettings = useMemo(() => {
-    if (!serverData?.settings?.feature_settings) return null;
-
-    const { battle, gacha, fortune } = serverData.settings.feature_settings;
-    if (!battle || !gacha || !fortune) return null;
-
-    return (
-      <EditableFeatureCard
-        title="機能設定"
-        isEditing={editingSection === 'feature-settings'}
-        onEditToggle={() => setEditingSection(editingSection === 'feature-settings' ? null : 'feature-settings')}
-        onSave={() => {
-          if (featureData) {
-            handleUpdateSettings('feature-settings', featureData);
-          }
-        }}
-        editForm={
-          <FeatureSettingsWrapper
-            settings={serverData.settings}
-            pointUnit={serverData.settings.global_settings.point_unit}
-            onSubmit={setFeatureData}
-          />
-        }
-      >
-        <Tab.Group as="div" className="mt-8" onChange={setSelectedTab}>
-          <Tab.List className="flex space-x-1 rounded-xl bg-blue-900/20 p-1">
-            <Tab
-              className={({ selected }) =>
-                `w-full rounded-lg py-2.5 text-sm font-medium leading-5 
-                ${selected
-                  ? 'bg-white text-blue-700 shadow'
-                  : 'text-blue-500 hover:bg-white/[0.12] hover:text-blue-600'
-                }`
-              }
-            >
-              バトル設定
-            </Tab>
-            <Tab
-              className={({ selected }) =>
-                `w-full rounded-lg py-2.5 text-sm font-medium leading-5 
-                ${selected
-                  ? 'bg-white text-blue-700 shadow'
-                  : 'text-blue-500 hover:bg-white/[0.12] hover:text-blue-600'
-                }`
-              }
-            >
-              ガチャ設定
-            </Tab>
-            <Tab
-              className={({ selected }) =>
-                `w-full rounded-lg py-2.5 text-sm font-medium leading-5 
-                ${selected
-                  ? 'bg-white text-blue-700 shadow'
-                  : 'text-blue-500 hover:bg-white/[0.12] hover:text-blue-600'
-                }`
-              }
-            >
-              占い設定
-            </Tab>
-          </Tab.List>
-
-          <Tab.Panels className="mt-4">
-            <Tab.Panel className="bg-white rounded-xl p-6 shadow-sm">
-              <div className="flex justify-between items-center mb-6">
-                <div>
-                  <h3 className="text-lg font-medium">バトル機能</h3>
-                  <p className="text-sm text-gray-500">バトル機能の設定を管理します</p>
-                </div>
-                <span className={`px-3 py-1 rounded-full text-sm font-medium ${battle.enabled
-                  ? "bg-green-100 text-green-800"
-                  : "bg-red-100 text-red-800"
-                  }`}>
-                  {battle.enabled ? "有効" : "無効"}
-                </span>
-              </div>
-              <div className="grid grid-cols-2 gap-6">
-                <div>
-                  <p className="text-sm text-gray-500">キル報酬</p>
-                  <p className="font-medium">{battle.points_per_kill.toLocaleString()} {serverData.settings.global_settings.point_unit}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">勝者報酬</p>
-                  <p className="font-medium">{battle.winner_points.toLocaleString()} {serverData.settings.global_settings.point_unit}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">開始遅延</p>
-                  <p className="font-medium">{battle.start_delay_minutes}分</p>
-                </div>
-              </div>
-            </Tab.Panel>
-
-            <Tab.Panel className="bg-white rounded-xl p-6 shadow-sm">
-              <div className="flex justify-between items-center mb-6">
-                <div>
-                  <h3 className="text-lg font-medium">ガチャ機能</h3>
-                  <p className="text-sm text-gray-500">ガチャ機能の設定を管理します</p>
-                </div>
-                <span className={`px-3 py-1 rounded-full text-sm font-medium ${gacha.enabled
-                  ? "bg-green-100 text-green-800"
-                  : "bg-red-100 text-red-800"
-                  }`}>
-                  {gacha.enabled ? "有効" : "無効"}
-                </span>
-              </div>
-
-              <div className="divide-y divide-gray-200">
-                {/* アイテム設定 */}
-                <div className="pb-6">
-                  <h4 className="text-base font-medium text-gray-900 mb-4">アイテム設定</h4>
-                  <div className="space-y-3">
-                    {gacha.items.map((item, index) => {
-                      const totalWeight = calculateTotalWeight(gacha.items);
-                      const probability = (parseInt(item.weight) / totalWeight * 100).toFixed(1);
-
-                      return (
-                        <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                          <div>
-                            <p className="font-medium">{item.name}</p>
-                            <p className="text-sm text-gray-500">確率: {probability}%</p>
-                          </div>
-                          <p className="font-medium">{item.points.toLocaleString()} {serverData.settings.global_settings.point_unit}</p>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* メッセージ設定 */}
-                <div className="py-6">
-                  <h4 className="text-base font-medium text-gray-900 mb-4">メッセージ設定</h4>
-                  <div className="space-y-4">
-                    <div className="bg-gray-50 p-4 rounded-lg">
-                      <h5 className="text-sm font-medium text-gray-700 mb-2">セットアップメッセージ</h5>
-                      <p className="text-gray-600">{gacha.messages?.setup || '設定なし'}</p>
-                    </div>
-                    <div className="bg-gray-50 p-4 rounded-lg">
-                      <h5 className="text-sm font-medium text-gray-700 mb-2">デイリーメッセージ</h5>
-                      <p className="text-gray-600">{gacha.messages?.daily || '設定なし'}</p>
-                      <p className="text-xs text-gray-500 mt-2">変数: {'{user}'}</p>
-                    </div>
-                    <div className="bg-gray-50 p-4 rounded-lg">
-                      <h5 className="text-sm font-medium text-gray-700 mb-2">当選メッセージ</h5>
-                      <p className="text-gray-600">{gacha.messages?.win || '設定なし'}</p>
-                      <p className="text-xs text-gray-500 mt-2">変数: {'{user}'}, {'{item}'}</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* メディア設定 */}
-                <div className="pt-6">
-                  <h4 className="text-base font-medium text-gray-900 mb-4">メディア設定</h4>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-gray-50 p-4 rounded-lg">
-                      <h5 className="text-sm font-medium text-gray-700 mb-2">セットアップ画像</h5>
-                      {gacha.media?.setup_image ? (
-                        <div className="mt-2">
-                          <img
-                            src={gacha.media.setup_image}
-                            alt="Setup"
-                            className="w-full h-auto rounded border border-gray-200"
-                          />
-                        </div>
-                      ) : (
-                        <p className="text-gray-500 text-sm">設定なし</p>
-                      )}
-                    </div>
-                    <div className="bg-gray-50 p-4 rounded-lg">
-                      <h5 className="text-sm font-medium text-gray-700 mb-2">バナーGIF</h5>
-                      {gacha.media?.banner_gif ? (
-                        <div className="mt-2">
-                          <img
-                            src={gacha.media.banner_gif}
-                            alt="Banner"
-                            className="w-full h-auto rounded border border-gray-200"
-                          />
-                        </div>
-                      ) : (
-                        <p className="text-gray-500 text-sm">設定なし</p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </Tab.Panel>
-
-            <Tab.Panel className="bg-white rounded-xl p-6 shadow-sm">
-              <div className="flex justify-between items-center mb-6">
-                <div>
-                  <h3 className="text-lg font-medium">占い機能</h3>
-                  <p className="text-sm text-gray-500">占い機能の設定を管理します</p>
-                </div>
-                <span className={`px-3 py-1 rounded-full text-sm font-medium ${fortune.enabled
-                  ? "bg-green-100 text-green-800"
-                  : "bg-red-100 text-red-800"
-                  }`}>
-                  {fortune.enabled ? "有効" : "無効"}
-                </span>
-              </div>
-            </Tab.Panel>
-          </Tab.Panels>
-        </Tab.Group>
-      </EditableFeatureCard>
-    );
-  }, [serverData, calculateTotalWeight, editingSection, featureData, handleUpdateSettings]);
 
   if (status === "loading") {
     return (
@@ -588,8 +317,34 @@ const ServerDashboard = () => {
         {serverData && selectedServer && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="lg:col-span-2 space-y-8">
-              {ServerInfo}
-              {FeatureSettings}
+              {/* サーバー情報を表示 */}
+              <ServerInfo
+                serverData={serverData}
+                selectedServer={selectedServer}
+                editingSection={editingSection}
+                setEditingSection={setEditingSection}
+                handleUpdateSettings={handleUpdateSettings}
+              />
+
+              <FeatureSettings
+                serverData={serverData}
+                featureData={featureData}
+                setFeatureData={setFeatureData}
+                editingSection={editingSection}
+                setEditingSection={setEditingSection}
+                handleUpdateSettings={handleUpdateSettings}
+                calculateTotalWeight={calculateTotalWeight}
+                automationRules={automationRules}
+                automationHistory={automationHistory}
+                setAutomationRules={setAutomationRules}
+                changeHistory={changeHistory}
+                setChangeHistory={setChangeHistory}
+                selectedServerId={selectedServerId}
+                handleUpdateAutomationRule={handleUpdateAutomationRule}
+                setSaving={setSaving}
+                setError={setError}
+                serverRoles={serverRoles}
+              />
 
               {changeHistory.length > 0 && (
                 <div className="bg-white rounded-lg shadow-sm p-6">

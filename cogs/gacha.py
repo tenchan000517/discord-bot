@@ -108,6 +108,15 @@ class GachaView(discord.ui.View):
                 {'last_gacha_date': today}
             )
 
+            # Automationマネージャーに通知を追加
+            automation_cog = self.bot.get_cog('Automation')
+            if automation_cog:
+                await automation_cog.automation_manager.process_points_update(
+                    user_id,
+                    server_id,
+                    float(new_gacha_points)  # Decimal型を float に変換
+                )
+
             # ロール付与チェック
             if hasattr(gacha_settings, 'roles') and gacha_settings.roles:
                 for role_setting in gacha_settings.roles:
@@ -256,7 +265,7 @@ class Gacha(commands.Cog):
     async def gacha_panel(self, ctx):
         """ガチャパネルを設置"""
         settings = await self.bot.get_server_settings(str(ctx.guild.id))
-        print(f"[DEBUG] settings: {settings}")
+        # print(f"[DEBUG] settings: {settings}")
 
         if not settings.global_settings.features_enabled.get('gacha', True):
             await ctx.send("このサーバーではガチャ機能が無効になっています。")
@@ -272,7 +281,7 @@ class Gacha(commands.Cog):
             print(f"Failed to delete old panel: {e}")
 
         gacha_settings = settings.gacha_settings
-        print(f"[DEBUG] gacha_settings: {gacha_settings}")
+        # print(f"[DEBUG] gacha_settings: {gacha_settings}")
 
         # パネルの作成と送信
         embed = await self._create_panel_embed(gacha_settings)

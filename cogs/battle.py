@@ -376,13 +376,43 @@ class BattleRoyale(commands.Cog):
             if game.settings.points_enabled and hasattr(self.bot, 'db'):
                 try:
                     # 優勝ポイントの付与
-                    self.bot.db.add_points(winner_id, game.settings.winner_points)
+                    await self.bot.db.update_feature_points(
+                        winner_id,
+                        game.server_id,
+                        'battle',
+                        game.settings.winner_points
+                    )
+                    
+                    # Automationマネージャーに通知
+                    automation_cog = self.bot.get_cog('Automation')
+                    if automation_cog:
+                        current_points = await self.bot.db.get_user_points(winner_id, game.server_id)
+                        await automation_cog.automation_manager.process_points_update(
+                            winner_id,
+                            game.server_id,
+                            current_points
+                        )
                     
                     # キルポイントの付与
                     for player_id, kills in game.kill_counts.items():
                         if kills > 0:
                             kill_points = kills * game.settings.points_per_kill
-                            self.bot.db.add_points(player_id, kill_points)
+                            await self.bot.db.update_feature_points(
+                                player_id,
+                                game.server_id,
+                                'battle',
+                                kill_points
+                            )
+                            
+                            # キルポイントに対してもAutomationマネージャーに通知
+                            if automation_cog:
+                                current_points = await self.bot.db.get_user_points(player_id, game.server_id)
+                                await automation_cog.automation_manager.process_points_update(
+                                    player_id,
+                                    game.server_id,
+                                    current_points
+                                )
+                                
                 except Exception as e:
                     print(f"Failed to add points: {e}")
 
