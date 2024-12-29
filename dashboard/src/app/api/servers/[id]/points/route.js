@@ -14,7 +14,11 @@ export async function PUT(request, { params }) {
 
     try {
         const body = await request.json();
+        console.log('Received data:', body); // デバッグログ
+
         const { user_id, points } = body;
+
+        console.log('Type of points:', typeof points);
 
         const aws = new AWSWrapper();
         const response = await aws.updateUserPoints(id, user_id, points);

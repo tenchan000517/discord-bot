@@ -87,11 +87,11 @@ class AutomationManager:
                     decimal_points = Decimal(str(points))
 
                     # 実行履歴を記録
-                    await self._log_execution(rule, {
-                        'user_id': user_id,
-                        'points': decimal_points,  # Decimalとして保存
-                        'trigger_type': 'points_update'
-                    })
+                    # await self._log_execution(rule, {
+                    #     'user_id': user_id,
+                    #     'points': decimal_points,  # Decimalとして保存
+                    #     'trigger_type': 'points_update'
+                    # })
 
         except Exception as e:
             print(f"Error processing points update: {e}")
@@ -337,20 +337,20 @@ class AutomationManager:
             print(f"Notification error: {e}")
             print(traceback.format_exc())
             
-    async def _log_execution(self, rule: AutomationRule, data: Dict[str, Any]):
-        """ルール実行のログを記録"""
-        try:
-            await self.db.save_automation_history({
-                'server_id': rule.server_id,
-                'rule_id': rule.id,
-                'user_id': data['user_id'],
-                'trigger_type': data.get('type'),
-                'executed_at': datetime.now(pytz.UTC).isoformat(),
-                'data': data
-            })
-        except Exception as e:
-            print(f"Error logging execution: {e}")
-            print(traceback.format_exc())
+    # async def _log_execution(self, rule: AutomationRule, data: Dict[str, Any]):
+    #     """ルール実行のログを記録"""
+    #     try:
+    #         await self.db.save_automation_history({
+    #             'server_id': rule.server_id,
+    #             'rule_id': rule.id,
+    #             'user_id': data['user_id'],
+    #             'trigger_type': data.get('type'),
+    #             'executed_at': datetime.now(pytz.UTC).isoformat(),
+    #             'data': data
+    #         })
+    #     except Exception as e:
+    #         print(f"Error logging execution: {e}")
+    #         print(traceback.format_exc())
 
     async def process_automation_rules(
         self,

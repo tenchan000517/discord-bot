@@ -64,6 +64,14 @@ export class AWSWrapper {
                     },
                     fortune: {
                         enabled: false
+                    },
+                    point_consumption: {
+                        enabled: false,
+                        button_name: 'ポイント消費',
+                        required_points: 0,
+                        notification_channel_id: '',
+                        logging_enabled: false,
+                        logging_actions: []
                     }
                 },
                 version: 1,
@@ -112,36 +120,56 @@ export class AWSWrapper {
                 IndexName: 'ServerIndex',
                 KeyConditionExpression: 'server_id = :sid',
                 ExpressionAttributeValues: {
-                    ':sid': serverId
+                    ':sid': serverId,
                 },
-                Limit: limit
             });
             const response = await this.docClient.send(command);
-            return response.Items;
+    
+            // ポイントフィールドの型を確認して正規化
+            const normalizedRankings = response.Items.map(user => {
+                let points = user.points;
+    
+                if (typeof points === 'string') {
+                    // 文字列を数値に変換
+                    points = Number(points);
+                } else if (points && typeof points === 'object' && points.valueOf) {
+                    // Decimal 型の場合、数値に変換
+                    points = Number(points.valueOf());
+                } else if (typeof points !== 'number') {
+                    // 型が不明な場合、デフォルト値を設定
+                    points = 0;
+                }
+    
+                return {
+                    ...user,
+                    points, // 正規化済みのポイント
+                };
+            });
+    
+            return normalizedRankings;
         } catch (error) {
             console.error("Error getting server rankings:", error);
             throw error;
         }
-    }
-
+    }    
+    
     async getServerData(serverId) {
         try {
             const [settings, rankings] = await Promise.all([
                 this.getServerSettings(serverId),
                 this.getServerRankings(serverId)
             ]);
-
+    
             return {
                 settings,
-                rankings: rankings.sort((a, b) =>
-                    (b.points?.total || 0) - (a.points?.total || 0)
-                )
+                rankings: rankings.sort((a, b) => (b.points || 0) - (a.points || 0)) // 数値型のみでソート
             };
         } catch (error) {
             console.error("Error getting server data:", error);
             throw error;
         }
     }
+   
 
     // 既存のAWSWrapperクラスに追加
     async getAllServerIds() {
@@ -210,28 +238,54 @@ export class AWSWrapper {
     }
 
     // ユーザーポイントの更新
-    async updateUserPoints(serverId, userId, points) {
+    async updateUserPoints(serverId, userId, newPoints) {
         try {
-            const command = new UpdateCommand({
+            const getCommand = new GetCommand({
                 TableName: 'discord_users',
                 Key: {
-                    server_id: serverId,
-                    user_id: userId
+                    pk: `USER#${userId}#SERVER#${serverId}`
+                }
+            });
+            const existingData = await this.docClient.send(getCommand);
+            console.log('Existing data:', existingData);
+    
+            if (!existingData.Item) {
+                // データが存在しない場合、新規作成
+                console.log('No existing data. Creating new entry.');
+                const putCommand = new PutCommand({
+                    TableName: 'discord_users',
+                    Item: {
+                        pk: `USER#${userId}#SERVER#${serverId}`,
+                        points: newPoints,
+                        updated_at: new Date().toISOString(),
+                    }
+                });
+                const putResponse = await this.docClient.send(putCommand);
+                console.log('PutCommand response:', putResponse);
+                return putResponse;
+            }
+    
+            // データが存在する場合、更新
+            console.log('Updating existing data.');
+            const updateCommand = new UpdateCommand({
+                TableName: 'discord_users',
+                Key: {
+                    pk: `USER#${userId}#SERVER#${serverId}`
                 },
-                UpdateExpression: 'SET points = :p, version = :v, last_modified = :lm',
+                UpdateExpression: 'SET points = :p, updated_at = :u',
                 ExpressionAttributeValues: {
-                    ':p': points,
-                    ':v': points.version || 1,
-                    ':lm': new Date().toISOString()
+                    ':p': newPoints,
+                    ':u': new Date().toISOString()
                 },
                 ReturnValues: 'ALL_NEW'
             });
-
-            const response = await this.docClient.send(command);
+            const response = await this.docClient.send(updateCommand);
+            console.log('UpdateCommand response:', response);
             return response.Attributes;
+    
         } catch (error) {
             console.error("Error updating user points:", error);
-            throw error;
+            throw new Error("Failed to update user points");
         }
     }
 
@@ -297,26 +351,26 @@ export class AWSWrapper {
         }
     }
 
-    // オートメーション履歴の取得
-    async getAutomationHistory(serverId, limit = 10) {
-        try {
-            const command = new QueryCommand({
-                TableName: 'automation_history',
-                KeyConditionExpression: 'server_id = :serverId',
-                ExpressionAttributeValues: {
-                    ':serverId': serverId
-                },
-                ScanIndexForward: false,  // 新しい順に取得
-                Limit: limit
-            });
+    // // オートメーション履歴の取得
+    // async getAutomationHistory(serverId, limit = 10) {
+    //     try {
+    //         const command = new QueryCommand({
+    //             TableName: 'automation_history',
+    //             KeyConditionExpression: 'server_id = :serverId',
+    //             ExpressionAttributeValues: {
+    //                 ':serverId': serverId
+    //             },
+    //             ScanIndexForward: false,  // 新しい順に取得
+    //             Limit: limit
+    //         });
 
-            const response = await this.docClient.send(command);
-            return response.Items || [];
-        } catch (error) {
-            console.error('Error getting automation history:', error);
-            throw error;
-        }
-    }
+    //         const response = await this.docClient.send(command);
+    //         return response.Items || [];
+    //     } catch (error) {
+    //         console.error('Error getting automation history:', error);
+    //         throw error;
+    //     }
+    // }
 
     async updateAutomationRule(serverId, ruleId, updateData) {
         try {
@@ -484,26 +538,92 @@ export class AWSWrapper {
     }
 
     // オートメーション履歴の記録
-    async logAutomationExecution(serverId, ruleId, userId, success, details = null) {
-        try {
-            const historyEntry = {
-                server_id: serverId,
-                timestamp: new Date().toISOString(),
-                rule_id: ruleId,
-                user_id: userId,
-                success: success,
-                details: details
-            };
+    // async logAutomationExecution(serverId, ruleId, userId, success, details = null) {
+    //     try {
+    //         const historyEntry = {
+    //             server_id: serverId,
+    //             timestamp: new Date().toISOString(),
+    //             rule_id: ruleId,
+    //             user_id: userId,
+    //             success: success,
+    //             details: details
+    //         };
 
-            const command = new PutCommand({
-                TableName: 'automation_history',
-                Item: historyEntry
+    //         const command = new PutCommand({
+    //             TableName: 'automation_history',
+    //             Item: historyEntry
+    //         });
+
+    //         await this.docClient.send(command);
+    //         return historyEntry;
+    //     } catch (error) {
+    //         console.error('Error logging automation execution:', error);
+    //         throw error;
+    //     }
+    // }
+
+    // ポイント消費設定の取得
+    async getPointConsumptionSettings(serverId) {
+        try {
+            const command = new GetCommand({
+                TableName: 'server_settings',
+                Key: {
+                    server_id: serverId
+                },
+                ProjectionExpression: 'feature_settings.point_consumption'
             });
 
-            await this.docClient.send(command);
-            return historyEntry;
+            const response = await this.docClient.send(command);
+            return response.Item?.feature_settings?.point_consumption || null;
         } catch (error) {
-            console.error('Error logging automation execution:', error);
+            console.error('Error getting point consumption settings:', error);
+            throw error;
+        }
+    }
+
+    // ポイント消費設定の更新
+    async updatePointConsumptionSettings(serverId, settings) {
+        try {
+            const now = new Date().toISOString();
+            const command = new UpdateCommand({
+                TableName: 'server_settings',
+                Key: {
+                    server_id: serverId
+                },
+                UpdateExpression: 'SET feature_settings.point_consumption = :settings, last_modified = :lastModified',
+                ExpressionAttributeValues: {
+                    ':settings': settings,
+                    ':lastModified': now
+                },
+                ReturnValues: 'ALL_NEW'
+            });
+
+            const response = await this.docClient.send(command);
+            return response.Attributes;
+        } catch (error) {
+            console.error('Error updating point consumption settings:', error);
+            throw error;
+        }
+    }
+
+    // 履歴の保存（監査ログ用）
+    async saveAuditLog(serverId, action, data, userId) {
+        try {
+            const command = new PutCommand({
+                TableName: 'audit_logs',
+                Item: {
+                    server_id: serverId,
+                    timestamp: new Date().toISOString(),
+                    action,
+                    data,
+                    user_id: userId
+                }
+            });
+
+            const response = await this.docClient.send(command);
+            return response;
+        } catch (error) {
+            console.error("Error saving audit log:", error);
             throw error;
         }
     }

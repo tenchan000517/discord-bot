@@ -55,9 +55,8 @@ export async function GET(request, { params }) {
 
         const aws = new AWSWrapper();
         const rules = await aws.getAutomationRules(serverId);
-        const history = await aws.getAutomationHistory(serverId, 10);
 
-        return NextResponse.json({ rules, history });
+        return NextResponse.json({ rules });
     } catch (error) {
         console.error('API Error:', error);
         return NextResponse.json({ message: error.message }, { status: 500 });

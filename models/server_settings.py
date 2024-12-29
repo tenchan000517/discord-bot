@@ -9,6 +9,7 @@ class FeatureType(Enum):
     GACHA = "gacha"
     BATTLE = "battle"
     FORTUNE = "fortune"
+    POINT_CONSUMPTION = "point_consumption"  # 追加
 
 @dataclass
 class PointDistribution:
@@ -32,6 +33,7 @@ class MessageSettings:
     daily: str
     win: str
     custom_messages: Dict[str, str]
+    tweet_message: Optional[str] = None  # 追加: X投稿用メッセージ
 
     def to_dict(self):
         return {
@@ -79,6 +81,31 @@ class FortuneFeatureSettings:
     enabled: bool = True
     # 占い機能固有の設定をここに追加
 
+# 新しい設定クラスを追加
+@dataclass
+class PointConsumptionFeatureSettings:
+    enabled: bool = True
+    button_name: str = "ポイント消費"
+    channel_id: Optional[str] = None
+    notification_channel_id: Optional[str] = None
+    mention_role_ids: List[str] = None
+    use_thread: bool = False
+    completion_message_enabled: bool = True
+    required_points: int = 0
+    logging_enabled: bool = False
+    logging_channel_id: Optional[str] = None
+    logging_actions: List[str] = None
+    gain_history_enabled: bool = False
+    gain_history_channel_id: Optional[str] = None
+    consumption_history_enabled: bool = False
+    consumption_history_channel_id: Optional[str] = None
+
+    def __post_init__(self):
+        if self.mention_role_ids is None:
+            self.mention_role_ids = []
+        if self.logging_actions is None:
+            self.logging_actions = []
+
 @dataclass
 class GlobalSettings:
     point_unit: str = "ポイント"
@@ -101,12 +128,15 @@ class ServerSettings:
     gacha_settings: GachaFeatureSettings
     battle_settings: BattleFeatureSettings
     fortune_settings: FortuneFeatureSettings
+    point_consumption_settings: PointConsumptionFeatureSettings  # 追加
     updated_at: str = None
     version: int = 1
 
     def __post_init__(self):
         if self.updated_at is None:
             self.updated_at = datetime.now(pytz.timezone('Asia/Tokyo')).isoformat()
+        if self.point_consumption_settings is None:  # 追加
+            self.point_consumption_settings = PointConsumptionFeatureSettings()
 
     def to_dict(self) -> dict:
         """設定をDynamoDBに保存可能な形式に変換"""
@@ -138,6 +168,23 @@ class ServerSettings:
                 },
                 'fortune': {
                     'enabled': self.fortune_settings.enabled
+                },
+                'point_consumption': {
+                    'enabled': self.point_consumption_settings.enabled,
+                    'button_name': self.point_consumption_settings.button_name,
+                    'channel_id': self.point_consumption_settings.channel_id,
+                    'notification_channel_id': self.point_consumption_settings.notification_channel_id,
+                    'mention_role_ids': self.point_consumption_settings.mention_role_ids,
+                    'use_thread': self.point_consumption_settings.use_thread,
+                    'completion_message_enabled': self.point_consumption_settings.completion_message_enabled,
+                    'required_points': self.point_consumption_settings.required_points,
+                    'logging_enabled': self.point_consumption_settings.logging_enabled,
+                    'logging_channel_id': self.point_consumption_settings.logging_channel_id,
+                    'logging_actions': self.point_consumption_settings.logging_actions,
+                    'gain_notification_enabled': self.global_settings.point_history_settings.gain_notification_enabled,
+                    'gain_notification_channel_id': self.global_settings.point_history_settings.gain_notification_channel_id,
+                    'consumption_notification_enabled': self.global_settings.point_history_settings.consumption_notification_enabled,
+                    'consumption_notification_channel_id': self.global_settings.point_history_settings.consumption_notification_channel_id
                 }
             },
             'updated_at': self.updated_at,
@@ -193,12 +240,35 @@ class ServerSettings:
             enabled=feature_settings.get('fortune', {}).get('enabled', True)
         )
 
+        # ポイント消費設定を追加
+        point_consumption_data = feature_settings.get('point_consumption', {})
+
+        point_consumption_settings = PointConsumptionFeatureSettings(
+            enabled=point_consumption_data.get('enabled', True),
+            button_name=point_consumption_data.get('button_name', "ポイント消費"),
+            channel_id=point_consumption_data.get('channel_id'),
+            notification_channel_id=point_consumption_data.get('notification_channel_id'),
+            mention_role_ids=point_consumption_data.get('mention_role_ids', []),
+            use_thread=point_consumption_data.get('use_thread', False),
+            completion_message_enabled=point_consumption_data.get('completion_message_enabled', True),
+            required_points=point_consumption_data.get('required_points', 0),
+            logging_enabled=point_consumption_data.get('logging_enabled', False),
+            logging_channel_id=point_consumption_data.get('logging_channel_id'),
+            logging_actions=point_consumption_data.get('logging_actions', []),
+            gain_history_enabled=point_consumption_data.get('gain_history_enabled', False),
+            gain_history_channel_id=point_consumption_data.get('gain_history_channel_id'),
+            consumption_history_enabled=point_consumption_data.get('consumption_history_enabled', False),
+            consumption_history_channel_id=point_consumption_data.get('consumption_history_channel_id')
+        )
+
         return cls(
             server_id=data['server_id'],
             global_settings=global_settings,
             gacha_settings=gacha_settings,
             battle_settings=battle_settings,
             fortune_settings=fortune_settings,
+            point_consumption_settings=point_consumption_settings,  # 追加
             updated_at=data.get('updated_at'),
             version=data.get('version', 1)
         )
+

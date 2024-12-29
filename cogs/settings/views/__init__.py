@@ -4,6 +4,7 @@ from .gacha_view import GachaSettingsView
 from .battle_view import BattleSettingsView
 from .fortunes_view import FortuneSettingsView
 from .settings_view import SettingsView, FeatureSettingsView
+from .point_consumption_view import PointConsumptionSettingsView  # 追加
 
 __all__ = [
     'BaseSettingsView',
@@ -11,5 +12,6 @@ __all__ = [
     'BattleSettingsView',
     'FortuneSettingsView',
     'SettingsView',
-    'FeatureSettingsView'
-]
+    'FeatureSettingsView',
+    'PointConsumptionSettingsView'
+    ]

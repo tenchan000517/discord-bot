@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from utils.aws_database import AWSDatabase
 from utils.settings_manager import ServerSettingsManager
 from utils.point_manager import PointManager
+from utils.reward_manager import RewardManager
 
 import traceback
 
@@ -36,14 +37,23 @@ class GachaBot(commands.Bot):
         
         # データベース接続試行
         try:
+            # コアコンポーネントの初期化
             self.db = AWSDatabase()
             self.settings_manager = ServerSettingsManager(self.db)
-            self.point_manager = PointManager(self) # 追加
-
-            print("Database and Settings Manager initialized successfully")
+            self.point_manager = PointManager(self)
             self.db_available = True
+            print("Core database components initialized successfully")
+
+            # オプショナルコンポーネントの初期化
+            try:
+                self.reward_manager = RewardManager(self)
+                print("Reward manager initialized successfully")
+            except Exception as e:
+                print(f"Warning: Failed to initialize reward manager: {e}")
+                self.reward_manager = None
+
         except Exception as e:
-            print(f"Failed to initialize database: {e}")
+            print(f"Failed to initialize core database: {e}")
             print(traceback.format_exc())
             self.db_available = False
 
@@ -61,7 +71,7 @@ class GachaBot(commands.Bot):
                 extension_status.append("Admin: ❌")
 
             # 既存の拡張機能を読み込み
-            for ext in ['gacha', 'fortunes', 'battle', 'automation']:  # automationを追加
+            for ext in ['gacha', 'fortunes', 'battle', 'automation', 'rewards', 'points_consumption']:  # points_consumptionを追加
                 try:
                     await self.load_extension(f'cogs.{ext}')
                     print(f"Loaded {ext} extension")

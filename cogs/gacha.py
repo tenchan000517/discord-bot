@@ -1,10 +1,14 @@
 import discord
 from discord.ext import commands
+from discord import app_commands
 import pytz
 from datetime import datetime
 import traceback
 import random
 import asyncio  # 追加
+from utils.point_manager import PointSource
+import urllib.parse  # 追加
+from typing import Optional  # 追加
 
 class GachaView(discord.ui.View):
     def __init__(self, bot):
@@ -36,11 +40,13 @@ class GachaView(discord.ui.View):
             cache_key = f"{user_id}_{server_id}_gacha_result"
             cached_data = self.bot.cache.get(cache_key)
 
+            # 既にガチャを引いている場合の処理
             if cached_data and cached_data.get('last_gacha_date') == today:
-                # 既にガチャを引いている場合、キャッシュから結果を表示
                 last_item = cached_data.get('last_item', '不明')
                 last_points = cached_data.get('last_points', 0)
-                total_points = cached_data.get('points', 0)
+                # 合計ポイントは最新のものをDBから取得
+                total_points = await self.bot.point_manager.get_points(server_id, user_id)
+                print(f"[DEBUG] 今日のガチャは既に実行済みです - ユーザーID: {user_id}, 最後のアイテム: {last_item}, 獲得ポイント: {last_points}, 合計ポイント: {total_points}")
 
                 embed = discord.Embed(title="今日のガチャ結果", color=0x00ff00)
                 embed.add_field(name="獲得アイテム", value=last_item, inline=False)
@@ -69,53 +75,35 @@ class GachaView(discord.ui.View):
                 # アニメーションがない場合は応答を遅延
                 await interaction.response.defer(ephemeral=True)
 
-
             # ガチャ実行
             result_item = random.choices(
                 gacha_settings.items,
                 weights=[float(item['weight']) for item in gacha_settings.items]
             )[0]
             
-            # Decimal型を使用してポイント計算
-            from decimal import Decimal
-            points_to_add = Decimal(str(result_item['points']))
-            
-            # DynamoDBから現在のポイントを取得
-            current_data = await self.bot.db.get_user_data(user_id, server_id)
-            current_points_data = current_data.get('points', {}) if current_data else {}
-            
-            if not isinstance(current_points_data, dict):
-                current_points_data = {'gacha': Decimal('0'), 'total': Decimal('0')}
-                
-            # 現在のガチャポイントを取得し、新しいポイントを計算
-            current_gacha_points = Decimal(str(current_points_data.get('gacha', '0')))
-            new_gacha_points = current_gacha_points + points_to_add
+            # 獲得ポイントを計算
+            points_to_add = int(result_item['points'])
+            print(f"[DEBUG] 獲得したポイント: {points_to_add}, アイテム: {result_item['name']}")
 
-            # キャッシュに結果を保存
+            # 現在のポイントを取得して新しいポイントを計算
+            current_points = await self.bot.point_manager.get_points(server_id, user_id)
+            new_points = current_points + points_to_add
+            print(f"[DEBUG] 現在のポイント: {current_points}, 新しい合計ポイント: {new_points}")
+
+            # キャッシュに結果を保存（その日のガチャ結果として）
             self.bot.cache[cache_key] = {
                 'last_gacha_date': today,
                 'last_item': result_item['name'],
-                'last_points': points_to_add,
-                'points': new_gacha_points
+                'last_points': points_to_add  # その日のガチャで獲得したポイント
             }
 
-            # DynamoDBにポイントを保存
-            await self.bot.db.update_feature_points(
-                user_id, 
-                server_id, 
-                'gacha', 
-                new_gacha_points, 
-                {'last_gacha_date': today}
+            # ポイントを更新（通知も行われる）
+            await self.bot.point_manager.update_points(
+                user_id,
+                server_id,
+                new_points,
+                PointSource.GACHA
             )
-
-            # Automationマネージャーに通知を追加
-            automation_cog = self.bot.get_cog('Automation')
-            if automation_cog:
-                await automation_cog.automation_manager.process_points_update(
-                    user_id,
-                    server_id,
-                    float(new_gacha_points)  # Decimal型を float に変換
-                )
 
             # ロール付与チェック
             if hasattr(gacha_settings, 'roles') and gacha_settings.roles:
@@ -133,18 +121,37 @@ class GachaView(discord.ui.View):
                         except Exception as e:
                             print(f"Failed to add role: {e}")
 
-            # 結果表示用Embedの作成
+            # 結果表示用のEmbedとViewの作成
             result_embed = await self._create_result_embed(
-                result_item, points_to_add, new_gacha_points, settings, gacha_settings, interaction
+                result_item, points_to_add, new_points, settings, gacha_settings, interaction
             )
+            
+            # X投稿用のViewを作成
+            tweet_text = f"ガチャ結果！\n{result_item['name']}を獲得！\n+{points_to_add}ポイント獲得！\n"
+
+            # 設定からカスタムメッセージを追加（設定がある場合のみ）
+            if (settings.gacha_settings.messages and 
+                settings.gacha_settings.messages.tweet_message):
+                tweet_text += f"\n{settings.gacha_settings.messages.tweet_message}"
+
+            encoded_text = urllib.parse.quote(tweet_text)
+            twitter_url = f"https://twitter.com/intent/tweet?text={encoded_text}"
+            
+            share_view = discord.ui.View(timeout=None)  # タイムアウトなしに設定
+            share_view.add_item(discord.ui.Button(
+                label="結果をXに投稿", 
+                url=twitter_url,
+                style=discord.ButtonStyle.url,
+                emoji="🐦"
+            ))
 
             if gacha_settings.media and gacha_settings.media.gacha_animation_gif:
                 # アニメーション表示後、結果で上書き
-                await interaction.edit_original_response(embed=result_embed)
+                await interaction.edit_original_response(embed=result_embed, view=share_view)
             else:
                 # 通常の結果表示
-                await interaction.followup.send(embed=result_embed, ephemeral=True)
-            
+                await interaction.followup.send(embed=result_embed, view=share_view, ephemeral=True)
+
         except Exception as e:
             error_msg = f"エラーが発生しました: {str(e)}\n{traceback.format_exc()}"
             print(error_msg)
@@ -152,10 +159,14 @@ class GachaView(discord.ui.View):
 
     async def _create_result_embed(self, result_item, points, new_points, settings, gacha_settings, interaction):
         """結果表示用Embedの作成"""
+        print(f"[DEBUG] create_result_embed - ユーザーID: {interaction.user.id}")
+        print(f"[DEBUG] create_result_embed - 獲得ポイント: {points}")
+        print(f"[DEBUG] create_result_embed - 新しい合計ポイント: {new_points}")
+        
         embed = discord.Embed(title="ガチャ結果", color=0x00ff00)
         embed.add_field(name="獲得アイテム", value=result_item['name'], inline=False)
         embed.add_field(
-            name="獲得ポイント",
+            name="ポイント", 
             value=f"+{points}{settings.global_settings.point_unit}",
             inline=False
         )
@@ -164,10 +175,12 @@ class GachaView(discord.ui.View):
             value=f"{new_points}{settings.global_settings.point_unit}",
             inline=False
         )
-        
-        if gacha_settings.messages and gacha_settings.messages.win:
+
+        # メッセージ設定の確認と表示
+        message_settings = result_item.get('message_settings', {})
+        if message_settings.get('enabled', False) and message_settings.get('message'):
             # メッセージ内の変数を置換
-            win_message = gacha_settings.messages.win.format(
+            win_message = message_settings['message'].format(
                 user=interaction.user.name,
                 item=result_item['name']
             )
@@ -181,15 +194,66 @@ class GachaView(discord.ui.View):
             embed.set_image(url=result_item['image_url'])
             
         return embed
+    
+    @discord.ui.button(label="ガチャ結果をXに投稿", style=discord.ButtonStyle.secondary, emoji="🐦")
+    async def share_to_twitter(self, interaction: discord.Interaction, button: discord.ui.Button):
+        try:
+            user_id = str(interaction.user.id)
+            server_id = str(interaction.guild.id)
+            
+            # 現在のガチャ結果をキャッシュから取得
+            cache_key = f"{user_id}_{server_id}_gacha_result"
+            cached_data = self.bot.cache.get(cache_key)
+            
+            if not cached_data:
+                await interaction.response.send_message(
+                    "ガチャ結果が見つかりません。先にガチャを回してください。",
+                    ephemeral=True
+                )
+                return
+            
+            # サーバー設定を取得して追加メッセージをチェック
+            settings = await self.bot.get_server_settings(server_id)
+
+            # X投稿用のテキストを作成
+            tweet_text = f"ガチャ結果！\n{cached_data['last_item']}を獲得！\n+{cached_data['last_points']}ポイント獲得！\n"
+            
+            # 設定から追加メッセージを追加（設定がある場合のみ）
+            if (settings.gacha_settings.messages and 
+                settings.gacha_settings.messages.tweet_message):
+                tweet_text += f"\n{settings.gacha_settings.messages.tweet_message}"
+
+            # URLエンコードしてX投稿用のURLを生成
+            import urllib.parse
+            encoded_text = urllib.parse.quote(tweet_text)
+            twitter_url = f"https://twitter.com/intent/tweet?text={encoded_text}"
+            
+            # ボタン付きのメッセージを送信
+            view = discord.ui.View()
+            view.add_item(discord.ui.Button(
+                label="Xで投稿", 
+                url=twitter_url,
+                style=discord.ButtonStyle.url
+            ))
+            
+            await interaction.response.send_message(
+                "下のボタンをクリックしてXに投稿できます！",
+                view=view,
+                ephemeral=True
+            )
+
+        except Exception as e:
+            error_msg = f"エラーが発生しました: {str(e)}\n{traceback.format_exc()}"
+            print(error_msg)
+            await self._handle_error(interaction, "X投稿リンクの生成中にエラーが発生しました。")
 
     # GachaViewクラスに以下のメソッドを追加
     @discord.ui.button(label="ポイントを確認", style=discord.ButtonStyle.success)
     async def check_points(self, interaction: discord.Interaction, button: discord.ui.Button):
         try:
             user_id = str(interaction.user.id)
-            server_id = str(interaction.guild_id)
+            server_id = str(interaction.guild.id)
             
-            # サーバー設定を取得
             settings = await self.bot.get_server_settings(server_id)
             if not settings:
                 await interaction.response.send_message(
@@ -198,30 +262,41 @@ class GachaView(discord.ui.View):
                 )
                 return
             
-            # DynamoDBからユーザーデータを取得
-            user_data = await self.bot.db.get_user_data(user_id, server_id)
-            points_data = user_data.get('points', {}) if user_data else {'total': 0}
-            total_points = points_data.get('total', 0) if isinstance(points_data, dict) else 0
-            
-            # 全ユーザーのランキングを取得してユーザーの順位を計算
-            all_rankings = await self.bot.db.get_server_user_rankings(server_id)
-            user_rank = next((i + 1 for i, rank in enumerate(all_rankings) 
-                            if rank['user_id'] == user_id), len(all_rankings) + 1)
-            
-            embed = discord.Embed(title="ポイント状況", color=0x00ff00)
+            total_points = await self.bot.point_manager.get_points(server_id, user_id)
+            server_rankings = await self.bot.db.get_server_user_rankings(server_id)
+            total_members = interaction.guild.member_count
+            user_server_rank = next(
+                (i + 1 for i, rank in enumerate(server_rankings) 
+                if str(rank['user_id']) == str(user_id)),
+                len(server_rankings) + 1
+            )
+
+            # 新しいデザインのEmbed
+            embed = discord.Embed(color=0x2f3136)
+
+            # ユーザー名とアバターを横並びで表示
+            embed.set_author(
+                name=f"{interaction.user.display_name}",
+                icon_url=interaction.user.display_avatar.url
+            )
+
+            # RANKとPOINTを大きく表示（装飾文字を使用）
+            rank_display = f"```fix\n{user_server_rank}/{total_members}```"  # ランクとトータルメンバー数を表示
+            points_display = f"```yaml\n{total_points:,} {settings.global_settings.point_unit}```"  # yaml構文で別の色で表示
+
             embed.add_field(
-                name="現在のポイント", 
-                value=f"{total_points}{settings.global_settings.point_unit}", 
-                inline=False
+                name="RANK",
+                value=rank_display,
+                inline=True
             )
             embed.add_field(
-                name="現在の順位", 
-                value=f"{user_rank}位/{len(all_rankings)}人中", 
-                inline=False
+                name="POINT",
+                value=points_display,
+                inline=True
             )
-            
+
             await interaction.response.send_message(embed=embed, ephemeral=True)
-            
+                
         except Exception as e:
             error_msg = f"エラーが発生しました: {str(e)}\n{traceback.format_exc()}"
             print(error_msg)
@@ -241,39 +316,58 @@ class Gacha(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.command()
-    @commands.has_permissions(administrator=True)
-    async def gacha_setup(self, ctx):
+    @app_commands.command(name="gacha_setup", description="ガチャの初期設定とパネルを設置します")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def gacha_setup(self, interaction: discord.Interaction):
         """ガチャの初期設定とパネルの設置"""
-        server_id = str(ctx.guild.id)
+        server_id = str(interaction.guild_id)
         settings = await self.bot.get_server_settings(server_id)
         
         if not settings.global_settings.features_enabled.get('gacha', True):
-            await ctx.send("このサーバーではガチャ機能が無効になっています。")
+            await interaction.response.send_message("このサーバーではガチャ機能が無効になっています。", ephemeral=True)
             return
 
+        # パネルの作成と送信
         gacha_settings = settings.gacha_settings
+        embed = await self._create_panel_embed(gacha_settings)
+        view = GachaView(self.bot)
         
-        # セットアップメッセージ
-        embed = await self._create_setup_embed(gacha_settings)
-        await ctx.send(embed=embed)
-        # セットアップ後にパネルを設置
-        await self.gacha_panel(ctx)
+        # まずinteractionに応答
+        await interaction.response.send_message("ガチャパネルを設置します...", ephemeral=True)
+        
+        # その後、パネルを設置
+        await interaction.channel.send(embed=embed, view=view)
+        
+        # 成功メッセージを一時的に表示
+        temp_message = await interaction.channel.send(
+            embed=discord.Embed(
+                title="セットアップ完了",
+                description="ガチャパネルの設置が完了しました。",
+                color=0x00ff00
+            )
+        )
+        
+        # 3秒後に成功メッセージを削除
+        await asyncio.sleep(3)
+        try:
+            await temp_message.delete()
+        except:
+            pass
 
-    @commands.command()
-    @commands.has_permissions(administrator=True)
-    async def gacha_panel(self, ctx):
+    @app_commands.command(name="gacha_panel", description="ガチャパネルを設置します")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def gacha_panel(self, interaction: discord.Interaction):  # ctx -> interaction
         """ガチャパネルを設置"""
-        settings = await self.bot.get_server_settings(str(ctx.guild.id))
+        settings = await self.bot.get_server_settings(str(interaction.guild_id))
         # print(f"[DEBUG] settings: {settings}")
 
         if not settings.global_settings.features_enabled.get('gacha', True):
-            await ctx.send("このサーバーではガチャ機能が無効になっています。")
+            await interaction.response.send_message("このサーバーではガチャ機能が無効になっています。", ephemeral=True)
             return
 
         # 既存のパネルを削除
         try:
-            async for message in ctx.channel.history(limit=50):
+            async for message in interaction.channel.history(limit=50):
                 if message.author == self.bot.user and message.embeds and len(message.embeds) > 0:
                     if message.embeds[0].title == "デイリーガチャ":
                         await message.delete()
@@ -286,7 +380,7 @@ class Gacha(commands.Cog):
         # パネルの作成と送信
         embed = await self._create_panel_embed(gacha_settings)
         view = GachaView(self.bot)
-        sent_message = await ctx.send(embed=embed, view=view)
+        await interaction.response.send_message(embed=embed, view=view)
         
         # 成功メッセージを送信
         success_embed = discord.Embed(
@@ -294,7 +388,7 @@ class Gacha(commands.Cog):
             description="ガチャパネルの設置が完了しました。",
             color=0x00ff00
         )
-        temp_message = await ctx.send(embed=success_embed)
+        temp_message = await interaction.channel.send(embed=success_embed)
         
         # 3秒後に成功メッセージを削除
         await asyncio.sleep(3)
@@ -353,6 +447,38 @@ class Gacha(commands.Cog):
         #     )
             
         return embed
+    
+    @app_commands.command(name="set_tweet_message", description="X投稿時の追加メッセージを設定します")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def set_tweet_message(self, interaction: discord.Interaction, message: Optional[str] = None):
+        server_id = str(interaction.guild_id)
+        settings = await self.bot.get_server_settings(server_id)
+        
+        if not settings:
+            await interaction.response.send_message("設定の取得に失敗しました。", ephemeral=True)
+            return
+
+        # メッセージを更新
+        new_settings = {
+            'enabled': settings.gacha_settings.enabled,
+            'messages': {
+                'setup': settings.gacha_settings.messages.setup,
+                'daily': settings.gacha_settings.messages.daily,
+                'win': settings.gacha_settings.messages.win,
+                'custom_messages': settings.gacha_settings.messages.custom_messages,
+                'tweet_message': message  # 新しいメッセージを設定（Noneの場合は追加メッセージなし）
+            },
+            'media': settings.gacha_settings.media.to_dict() if settings.gacha_settings.media else None,
+            'items': settings.gacha_settings.items
+        }
+        
+        success = await self.bot.db.update_feature_settings(server_id, 'gacha', new_settings)
+        
+        if success:
+            response = "X投稿時の追加メッセージを設定しました。" if message else "X投稿時の追加メッセージを削除しました。"
+            await interaction.response.send_message(response, ephemeral=True)
+        else:
+            await interaction.response.send_message("設定の更新に失敗しました。", ephemeral=True)
 
 async def setup(bot):
     await bot.add_cog(Gacha(bot))

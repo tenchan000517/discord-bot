@@ -10,7 +10,7 @@ export const GachaSettingsForm = ({ settings, pointUnit, onChange }) => {
         messages: settings.messages || {
             setup: '',
             daily: '',
-            win: '',
+            tweet_message: '', // X投稿メッセージ用のフィールドを追加
             custom_messages: {}
         },
         media: settings.media || {
@@ -33,10 +33,20 @@ export const GachaSettingsForm = ({ settings, pointUnit, onChange }) => {
 
     const handleItemChange = (index, field, value) => {
         const newItems = [...formData.items];
-        newItems[index] = {
-            ...newItems[index],
-            [field]: field === 'weight' || field === 'points' ? parseInt(value, 10) : value
-        };
+        if (field === 'message_settings') {
+            newItems[index] = {
+                ...newItems[index],
+                message_settings: {
+                    ...newItems[index].message_settings,
+                    ...value
+                }
+            };
+        } else {
+            newItems[index] = {
+                ...newItems[index],
+                [field]: field === 'weight' || field === 'points' ? parseInt(value, 10) : value
+            };
+        }
         const newData = { ...formData, items: newItems };
         setFormData(newData);
         onChange(newData);
@@ -62,10 +72,20 @@ export const GachaSettingsForm = ({ settings, pointUnit, onChange }) => {
         onChange(newData);
     };
 
+    // アイテム追加メソッド
     const addItem = () => {
         const newData = {
             ...formData,
-            items: [...formData.items, { name: '', points: 0, weight: 1, image_url: '' }]
+            items: [...formData.items, {
+                name: '',
+                points: 0,
+                weight: 1,
+                image_url: '',
+                message_settings: {
+                    enabled: false,
+                    message: '{user}さん、{item}を獲得しました！'
+                }
+            }]
         };
         setFormData(newData);
         onChange(newData);
@@ -185,54 +205,88 @@ export const GachaSettingsForm = ({ settings, pointUnit, onChange }) => {
                 <div className="space-y-4">
                     {formData.items.map((item, index) => (
                         <div key={index} className="flex gap-3 items-start">
-                            <div className="flex-1 grid grid-cols-4 gap-2">
-                                <div>
-                                    <input
-                                        type="text"
-                                        value={item.name}
-                                        onChange={(e) => handleItemChange(index, 'name', e.target.value)}
-                                        placeholder="アイテム名"
-                                        className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                    />
-                                </div>
-                                <div>
-                                    <div className="flex items-center gap-2">
+                            <div className="flex-1 space-y-4">
+                                {/* 基本情報の行 */}
+                                <div className="grid grid-cols-4 gap-2">
+                                    <div>
                                         <input
-                                            type="number"
-                                            value={item.points}
-                                            onChange={(e) => handleItemChange(index, 'points', e.target.value)}
-                                            placeholder="ポイント"
-                                            min="0"
+                                            type="text"
+                                            value={item.name}
+                                            onChange={(e) => handleItemChange(index, 'name', e.target.value)}
+                                            placeholder="アイテム名"
                                             className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                                         />
-                                        <span className="text-gray-600 whitespace-nowrap">{pointUnit}</span>
                                     </div>
-                                </div>
-                                <div>
-                                    <div className="flex items-center gap-2">
+                                    <div>
+                                        <div className="flex items-center gap-2">
+                                            <input
+                                                type="number"
+                                                value={item.points}
+                                                onChange={(e) => handleItemChange(index, 'points', e.target.value)}
+                                                placeholder="ポイント"
+                                                min="0"
+                                                className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                            />
+                                            <span className="text-gray-600 whitespace-nowrap">{pointUnit}</span>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div className="flex items-center gap-2">
+                                            <input
+                                                type="number"
+                                                value={item.weight}
+                                                onChange={(e) => handleItemChange(index, 'weight', e.target.value)}
+                                                placeholder="重み"
+                                                min="1"
+                                                className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                            />
+                                            <span className="text-gray-600 whitespace-nowrap">
+                                                {calculateProbability(item.weight)}%
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div>
                                         <input
-                                            type="number"
-                                            value={item.weight}
-                                            onChange={(e) => handleItemChange(index, 'weight', e.target.value)}
-                                            placeholder="重み"
-                                            min="1"
+                                            type="text"
+                                            value={item.image_url || ''}
+                                            onChange={(e) => handleItemChange(index, 'image_url', e.target.value)}
+                                            placeholder="画像URL"
                                             className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                                         />
-                                        <span className="text-gray-600 whitespace-nowrap">
-                                            {calculateProbability(item.weight)}%
-                                        </span>
                                     </div>
                                 </div>
-                                <div>
-                                    <input
-                                        type="text"
-                                        value={item.image_url || ''}
-                                        onChange={(e) => handleItemChange(index, 'image_url', e.target.value)}
-                                        placeholder="画像URL"
-                                        className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                    />
+
+                                {/* メッセージ設定 */}
+                                <div className="bg-gray-50 p-4 rounded-lg">
+                                    <div className="flex items-center justify-between mb-3">
+                                        <h5 className="text-sm font-medium text-gray-700">当選メッセージ設定</h5>
+                                        <label className="relative inline-flex items-center cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={item.message_settings?.enabled ?? false}
+                                                onChange={(e) => handleItemChange(index, 'message_settings', { enabled: e.target.checked })}
+                                                className="sr-only peer"
+                                            />
+                                            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                        </label>
+                                    </div>
+                                    {item.message_settings?.enabled && (
+                                        <div>
+                                            <input
+                                                type="text"
+                                                value={item.message_settings?.message || ''}
+                                                onChange={(e) => handleItemChange(index, 'message_settings', { message: e.target.value })}
+                                                placeholder="当選メッセージを入力 ({user}と{item}が使用可能)"
+                                                className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                            />
+                                            <p className="text-sm text-gray-500 mt-1">
+                                                利用可能な変数: {'{user}'} - ユーザー名, {'{item}'} - アイテム名
+                                            </p>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
+
                             <button
                                 onClick={() => removeItem(index)}
                                 className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
@@ -252,115 +306,123 @@ export const GachaSettingsForm = ({ settings, pointUnit, onChange }) => {
                 </div>
             )}
 
-            {activeTab === 'messages' && (
-                <div className="space-y-6">
-                    <div className="space-y-4">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700">セットアップメッセージ</label>
-                            <textarea
-                                value={formData.messages.setup}
-                                onChange={(e) => handleMessageChange('setup', e.target.value)}
-                                placeholder="ガチャの初期設定時に表示されるメッセージ"
-                                className="mt-1 w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                rows="3"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700">デイリーメッセージ</label>
-                            <textarea
-                                value={formData.messages.daily}
-                                onChange={(e) => handleMessageChange('daily', e.target.value)}
-                                placeholder="ガチャパネルに表示されるメッセージ"
-                                className="mt-1 w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                rows="3"
-                            />
-                            <p className="text-sm text-gray-500 mt-1">
-                                利用可能な変数: {'{user}'} - ユーザー名
-                            </p>
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700">当選メッセージ</label>
-                            <textarea
-                                value={formData.messages.win}
-                                onChange={(e) => handleMessageChange('win', e.target.value)}
-                                placeholder="ガチャ実行時の当選メッセージ"
-                                className="mt-1 w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                rows="3"
-                            />
-                            <p className="text-sm text-gray-500 mt-1">
-                                利用可能な変数: {'{user}'} - ユーザー名, {'{item}'} - 獲得アイテム名
-                            </p>
+            {
+                activeTab === 'messages' && (
+                    <div className="space-y-6">
+                        <div className="space-y-4">
+                            {/* <div>
+                                <label className="block text-sm font-medium text-gray-700">セットアップメッセージ</label>
+                                <textarea
+                                    value={formData.messages.setup}
+                                    onChange={(e) => handleMessageChange('setup', e.target.value)}
+                                    placeholder="ガチャの初期設定時に表示されるメッセージ"
+                                    className="mt-1 w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                    rows="3"
+                                />
+                            </div> */}
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">デイリーメッセージ</label>
+                                <textarea
+                                    value={formData.messages.daily}
+                                    onChange={(e) => handleMessageChange('daily', e.target.value)}
+                                    placeholder="ガチャパネルに表示されるメッセージ"
+                                    className="mt-1 w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                    rows="3"
+                                />
+                                <p className="text-sm text-gray-500 mt-1">
+                                    利用可能な変数: {'{user}'} - ユーザー名
+                                </p>
+                            </div>
+                            {/* X投稿メッセージの設定を追加 */}
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">X投稿メッセージ</label>
+                                <textarea
+                                    value={formData.messages.tweet_message || ''}
+                                    onChange={(e) => handleMessageChange('tweet_message', e.target.value)}
+                                    placeholder="X（Twitter）に投稿する際の追加メッセージ"
+                                    className="mt-1 w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                    rows="3"
+                                />
+                                <p className="text-sm text-gray-500 mt-1">
+                                    ※このメッセージはガチャ結果の後に追加されます
+                                </p>
+                                <p className="text-sm text-gray-500">
+                                    デフォルト: ガチャ結果！ {'{item}'}を獲得！ +{'{points}'}ポイント獲得！
+                                </p>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )
+            }
 
-            {activeTab === 'media' && (
-                <div className="space-y-6">
-                    <div className="space-y-4">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700">セットアップ画像URL</label>
-                            <div className="flex gap-2 mt-1">
-                                <input
-                                    type="text"
-                                    value={formData.media.setup_image || ''}
-                                    onChange={(e) => handleMediaChange('setup_image', e.target.value)}
-                                    placeholder="https://example.com/setup-image.png"
-                                    className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                />
-                                {formData.media.setup_image && (
-                                    <img
-                                        src={formData.media.setup_image}
-                                        alt="Preview"
-                                        className="w-8 h-8 object-cover rounded"
+            {
+                activeTab === 'media' && (
+                    <div className="space-y-6">
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">セットアップ画像URL</label>
+                                <div className="flex gap-2 mt-1">
+                                    <input
+                                        type="text"
+                                        value={formData.media.setup_image || ''}
+                                        onChange={(e) => handleMediaChange('setup_image', e.target.value)}
+                                        placeholder="https://example.com/setup-image.png"
+                                        className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                                     />
-                                )}
+                                    {formData.media.setup_image && (
+                                        <img
+                                            src={formData.media.setup_image}
+                                            alt="Preview"
+                                            className="w-8 h-8 object-cover rounded"
+                                        />
+                                    )}
+                                </div>
                             </div>
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700">バナーGIF URL</label>
-                            <div className="flex gap-2 mt-1">
-                                <input
-                                    type="text"
-                                    value={formData.media.banner_gif || ''}
-                                    onChange={(e) => handleMediaChange('banner_gif', e.target.value)}
-                                    placeholder="https://example.com/banner.gif"
-                                    className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                />
-                                {formData.media.banner_gif && (
-                                    <img
-                                        src={formData.media.banner_gif}
-                                        alt="Preview"
-                                        className="w-8 h-8 object-cover rounded"
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">バナーGIF URL</label>
+                                <div className="flex gap-2 mt-1">
+                                    <input
+                                        type="text"
+                                        value={formData.media.banner_gif || ''}
+                                        onChange={(e) => handleMediaChange('banner_gif', e.target.value)}
+                                        placeholder="https://example.com/banner.gif"
+                                        className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                                     />
-                                )}
+                                    {formData.media.banner_gif && (
+                                        <img
+                                            src={formData.media.banner_gif}
+                                            alt="Preview"
+                                            className="w-8 h-8 object-cover rounded"
+                                        />
+                                    )}
+                                </div>
                             </div>
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700">ガチャ演出GIF URL</label>
-                            <div className="flex gap-2 mt-1">
-                                <input
-                                    type="text"
-                                    value={formData.media.gacha_animation_gif || ''}
-                                    onChange={(e) => handleMediaChange('gacha_animation_gif', e.target.value)}
-                                    placeholder="https://example.com/animation.gif"
-                                    className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                />
-                                {formData.media.gacha_animation_gif && (
-                                    <img
-                                        src={formData.media.gacha_animation_gif}
-                                        alt="Preview"
-                                        className="w-8 h-8 object-cover rounded"
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">ガチャ演出GIF URL</label>
+                                <div className="flex gap-2 mt-1">
+                                    <input
+                                        type="text"
+                                        value={formData.media.gacha_animation_gif || ''}
+                                        onChange={(e) => handleMediaChange('gacha_animation_gif', e.target.value)}
+                                        placeholder="https://example.com/animation.gif"
+                                        className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                                     />
-                                )}
+                                    {formData.media.gacha_animation_gif && (
+                                        <img
+                                            src={formData.media.gacha_animation_gif}
+                                            alt="Preview"
+                                            className="w-8 h-8 object-cover rounded"
+                                        />
+                                    )}
+                                </div>
+                                <p className="text-sm text-gray-500 mt-1">
+                                    ガチャを引く際に表示されるアニメーションGIF
+                                </p>
                             </div>
-                            <p className="text-sm text-gray-500 mt-1">
-                                ガチャを引く際に表示されるアニメーションGIF
-                            </p>
                         </div>
                     </div>
-                </div>
-            )}
-        </div>
+                )
+            }
+        </div >
     );
 };

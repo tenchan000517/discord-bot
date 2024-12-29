@@ -1,47 +1,34 @@
 import boto3
-import os
-from dotenv import load_dotenv
+from botocore.exceptions import BotoCoreError, ClientError
 
-load_dotenv()
-
-def list_tables():
+def fetch_all_points_with_type(table_name):
+    """
+    DynamoDB テーブルの全ポイントデータを取得し、points フィールドの型を特定
+    """
     try:
-        dynamodb = boto3.resource('dynamodb',
-            region_name='ap-northeast-1',
-            aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
-            aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY')
-        )
-        
-        # 全テーブルのリストを取得
-        tables = list(dynamodb.tables.all())
-        print("作成されたテーブル:")
-        for table in tables:
-            print(f"- {table.name}")
-            
-    except Exception as e:
-        print(f"エラーが発生しました: {e}")
+        # DynamoDB リソースの初期化
+        dynamodb = boto3.resource('dynamodb', region_name='ap-northeast-1')
+        table = dynamodb.Table(table_name)
 
-def list_tables():
-    try:
-        dynamodb = boto3.resource('dynamodb',
-            region_name='ap-northeast-1',
-            aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
-            aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY')
-        )
-        
-        # テーブル一覧の取得
-        tables = list(dynamodb.tables.all())
-        print("\n=== DynamoDB テーブル一覧 ===")
-        for table in tables:
-            print(f"テーブル名: {table.name}")
-            # テーブルの詳細情報を取得
-            table_detail = table.meta.client.describe_table(TableName=table.name)
-            print(f"ステータス: {table_detail['Table']['TableStatus']}")
-            print("キースキーマ:", table_detail['Table']['KeySchema'])
-            print("-" * 50)
+        # テーブル全体をスキャン
+        print(f"Scanning table '{table_name}' for all points data...")
+        response = table.scan()
+        items = response.get('Items', [])
 
-    except Exception as e:
-        print(f"エラーが発生しました: {e}")
+        # データが存在する場合
+        if items:
+            print("\n=== All Points Data with Type ===")
+            for item in items:
+                points = item.get('points', 'No Points')
+                points_type = type(points).__name__  # 型を特定
+                print(f"User: {item.get('pk')}, Points: {points}, Type: {points_type}")
+        else:
+            print("No data found in the table.")
 
+    except (BotoCoreError, ClientError) as error:
+        print("Error fetching data from DynamoDB:", error)
+
+# 実行
 if __name__ == "__main__":
-    list_tables()
+    table_name = "discord_users"  # DynamoDB テーブル名
+    fetch_all_points_with_type(table_name)

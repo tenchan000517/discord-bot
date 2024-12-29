@@ -247,3 +247,84 @@ class FortuneSettingsModal(BaseSettingsModal):
                 f"エラーが発生しました: {str(e)}",
                 ephemeral=True
             )
+
+class PointConsumptionSettingsModal(BaseSettingsModal):
+    def __init__(self, settings):
+        super().__init__(title="ポイント消費設定", settings=settings)
+
+        # ボタン表示名
+        self.button_name = discord.ui.TextInput(
+            label="ボタン表示名",
+            placeholder="消費ボタンに表示する名前",
+            required=True,
+            default=settings.button_name,
+            max_length=80
+        )
+        self.add_item(self.button_name)
+
+        # 必要ポイント数
+        self.required_points = discord.ui.TextInput(
+            label="必要ポイント数",
+            placeholder="消費に必要なポイント数",
+            required=True,
+            default=str(settings.required_points),
+            max_length=10
+        )
+        self.add_item(self.required_points)
+
+        # スレッド使用設定
+        self.use_thread = discord.ui.TextInput(
+            label="スレッドを使用",
+            placeholder="true または false",
+            required=True,
+            default=str(settings.use_thread).lower(),
+            max_length=5
+        )
+        self.add_item(self.use_thread)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            # 入力値のバリデーション
+            required_points = int(self.required_points.value)
+            if required_points < 0:
+                await interaction.response.send_message(
+                    "必要ポイント数は0以上の値を指定してください。",
+                    ephemeral=True
+                )
+                return
+
+            use_thread = self.use_thread.value.lower() == 'true'
+
+            # 設定を更新
+            updated_settings = {
+                'enabled': self.settings.enabled,
+                'button_name': self.button_name.value,
+                'required_points': required_points,
+                'use_thread': use_thread,
+                'channel_id': self.settings.channel_id,
+                'notification_channel_id': self.settings.notification_channel_id,
+                'mention_role_ids': self.settings.mention_role_ids,
+                'completion_message_enabled': self.settings.completion_message_enabled,
+                'logging_enabled': self.settings.logging_enabled,
+                'logging_channel_id': self.settings.logging_channel_id,
+                'logging_actions': self.settings.logging_actions
+            }
+
+            success = await interaction.client.settings_manager.update_feature_settings(
+                str(interaction.guild_id),
+                'point_consumption',
+                updated_settings
+            )
+
+            await self._handle_submit_result(interaction, success)
+
+        except ValueError:
+            await interaction.response.send_message(
+                "数値の入力が正しくありません。",
+                ephemeral=True
+            )
+        except Exception as e:
+            await interaction.response.send_message(
+                f"エラーが発生しました: {str(e)}",
+                ephemeral=True
+            )

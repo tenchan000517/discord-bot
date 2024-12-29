@@ -140,44 +140,44 @@ class Automation(commands.Cog):
             print(traceback.format_exc())
             await interaction.followup.send("コマンドの実行中にエラーが発生しました。", ephemeral=True)
 
-    @app_commands.command(name="automation-history", description="自動化ルールの実行履歴を表示します")
-    @app_commands.checks.has_permissions(administrator=True)
-    async def automation_history(self, interaction: discord.Interaction, limit: int = 10):
-        try:
-            history = await self.automation_manager.get_execution_history(str(interaction.guild_id), limit)
-            if not history:
-                await interaction.response.send_message("実行履歴がありません。")
-                return
+    # @app_commands.command(name="automation-history", description="自動化ルールの実行履歴を表示します")
+    # @app_commands.checks.has_permissions(administrator=True)
+    # async def automation_history(self, interaction: discord.Interaction, limit: int = 10):
+    #     try:
+    #         history = await self.automation_manager.get_execution_history(str(interaction.guild_id), limit)
+    #         if not history:
+    #             await interaction.response.send_message("実行履歴がありません。")
+    #             return
 
-            embed = discord.Embed(title="自動化ルール実行履歴", color=discord.Color.blue())
-            for entry in history:
-                timestamp = discord.utils.format_dt(entry.executed_at)
-                user = await self.bot.fetch_user(int(entry.user_id))
-                user_name = user.name if user else entry.user_id
+    #         embed = discord.Embed(title="自動化ルール実行履歴", color=discord.Color.blue())
+    #         for entry in history:
+    #             timestamp = discord.utils.format_dt(entry.executed_at)
+    #             user = await self.bot.fetch_user(int(entry.user_id))
+    #             user_name = user.name if user else entry.user_id
                 
-                embed.add_field(
-                    name=f"{timestamp}",
-                    value=f"ユーザー: {user_name}\n"
-                          f"ルール: {entry.rule_name}\n"
-                          f"結果: {'✅ 成功' if entry.success else '❌ 失敗'}",
-                    inline=False
-                )
+    #             embed.add_field(
+    #                 name=f"{timestamp}",
+    #                 value=f"ユーザー: {user_name}\n"
+    #                       f"ルール: {entry.rule_name}\n"
+    #                       f"結果: {'✅ 成功' if entry.success else '❌ 失敗'}",
+    #                 inline=False
+    #             )
             
-            await interaction.response.send_message(embed=embed)
-        except Exception as e:
-            print(f"Error in automation history command: {e}")
-            print(traceback.format_exc())
-            await interaction.followup.send("履歴の取得中にエラーが発生しました。", ephemeral=True)
+    #         await interaction.response.send_message(embed=embed)
+    #     except Exception as e:
+    #         print(f"Error in automation history command: {e}")
+    #         print(traceback.format_exc())
+    #         await interaction.followup.send("履歴の取得中にエラーが発生しました。", ephemeral=True)
 
-    @automation.error
-    @automation_history.error
-    async def automation_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError):
-        if isinstance(error, app_commands.MissingPermissions):
-            await interaction.response.send_message("このコマンドを実行する権限がありません。", ephemeral=True)
-        else:
-            print(f"Unexpected error in automation commands: {error}")
-            print(traceback.format_exc())
-            await interaction.followup.send("予期せぬエラーが発生しました。", ephemeral=True)
+    # @automation.error
+    # @automation_history.error
+    # async def automation_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError):
+    #     if isinstance(error, app_commands.MissingPermissions):
+    #         await interaction.response.send_message("このコマンドを実行する権限がありません。", ephemeral=True)
+    #     else:
+    #         print(f"Unexpected error in automation commands: {error}")
+    #         print(traceback.format_exc())
+    #         await interaction.followup.send("予期せぬエラーが発生しました。", ephemeral=True)
 
 async def setup(bot):
     await bot.add_cog(Automation(bot))

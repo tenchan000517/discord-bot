@@ -8,6 +8,7 @@ from typing import Optional
 
 from models.battle import BattleGame, BattleStatus, EventType
 from utils.battle_events import generate_battle_event, format_round_message
+from utils.point_manager import PointSource  # 追加
 
 class BattleView(discord.ui.View):
     def __init__(self, game: BattleGame, cog):
@@ -373,48 +374,46 @@ class BattleRoyale(commands.Cog):
                     print(f"Failed to add winner role: {e}")
 
             # ポイントの付与
-            if game.settings.points_enabled and hasattr(self.bot, 'db'):
+            if game.settings.points_enabled and hasattr(self.bot, 'point_manager'):
                 try:
-                    # 優勝ポイントの付与
-                    await self.bot.db.update_feature_points(
-                        winner_id,
+                    # 優勝者の現在のポイントを取得
+                    winner_current_points = await self.bot.point_manager.get_points(
                         game.server_id,
-                        'battle',
-                        game.settings.winner_points
+                        winner_id
                     )
                     
-                    # Automationマネージャーに通知
-                    automation_cog = self.bot.get_cog('Automation')
-                    if automation_cog:
-                        current_points = await self.bot.db.get_user_points(winner_id, game.server_id)
-                        await automation_cog.automation_manager.process_points_update(
-                            winner_id,
-                            game.server_id,
-                            current_points
-                        )
+                    # 優勝ポイントを加算
+                    winner_new_points = winner_current_points + game.settings.winner_points
+                    await self.bot.point_manager.update_points(
+                        winner_id,
+                        game.server_id,
+                        winner_new_points,
+                        PointSource.BATTLE_WIN
+                    )
                     
                     # キルポイントの付与
                     for player_id, kills in game.kill_counts.items():
                         if kills > 0:
-                            kill_points = kills * game.settings.points_per_kill
-                            await self.bot.db.update_feature_points(
-                                player_id,
+                            # 現在のポイントを取得
+                            current_points = await self.bot.point_manager.get_points(
                                 game.server_id,
-                                'battle',
-                                kill_points
+                                player_id
                             )
                             
-                            # キルポイントに対してもAutomationマネージャーに通知
-                            if automation_cog:
-                                current_points = await self.bot.db.get_user_points(player_id, game.server_id)
-                                await automation_cog.automation_manager.process_points_update(
-                                    player_id,
-                                    game.server_id,
-                                    current_points
-                                )
-                                
+                            # キルポイントを加算
+                            kill_points = kills * game.settings.points_per_kill
+                            new_points = current_points + kill_points
+                            
+                            await self.bot.point_manager.update_points(
+                                player_id,
+                                game.server_id,
+                                new_points,
+                                PointSource.BATTLE_KILL
+                            )
+
                 except Exception as e:
                     print(f"Failed to add points: {e}")
+                    print(traceback.format_exc())
 
         except Exception as e:
             print(f"Error handling rewards: {e}")
