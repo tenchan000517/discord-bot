@@ -13,8 +13,14 @@ import { v4 as uuidv4 } from 'uuid';  // UUIDの生成に使用
 
 export class AWSWrapper {
     constructor() {
+        console.log('AWS Credentials Debug:', {
+            hasAccessKey: !!process.env.AWS_ACCESS_KEY_ID,
+            hasSecretKey: !!process.env.AWS_SECRET_ACCESS_KEY,
+            region: process.env.AWS_DEFAULT_REGION || 'ap-northeast-1'
+        });
+
         this.client = new DynamoDBClient({
-            region: 'ap-northeast-1',
+            region: process.env.AWS_DEFAULT_REGION || 'ap-northeast-1',
             credentials: {
                 accessKeyId: process.env.AWS_ACCESS_KEY_ID,
                 secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
@@ -124,11 +130,11 @@ export class AWSWrapper {
                 },
             });
             const response = await this.docClient.send(command);
-    
+
             // ポイントフィールドの型を確認して正規化
             const normalizedRankings = response.Items.map(user => {
                 let points = user.points;
-    
+
                 if (typeof points === 'string') {
                     // 文字列を数値に変換
                     points = Number(points);
@@ -139,27 +145,27 @@ export class AWSWrapper {
                     // 型が不明な場合、デフォルト値を設定
                     points = 0;
                 }
-    
+
                 return {
                     ...user,
                     points, // 正規化済みのポイント
                 };
             });
-    
+
             return normalizedRankings;
         } catch (error) {
             console.error("Error getting server rankings:", error);
             throw error;
         }
-    }    
-    
+    }
+
     async getServerData(serverId) {
         try {
             const [settings, rankings] = await Promise.all([
                 this.getServerSettings(serverId),
                 this.getServerRankings(serverId)
             ]);
-    
+
             return {
                 settings,
                 rankings: rankings.sort((a, b) => (b.points || 0) - (a.points || 0)) // 数値型のみでソート
@@ -169,20 +175,31 @@ export class AWSWrapper {
             throw error;
         }
     }
-   
+
 
     // 既存のAWSWrapperクラスに追加
     async getAllServerIds() {
         try {
+            console.log('Attempting to get server IDs...');
+
             const command = new ScanCommand({
                 TableName: "server_settings",
                 ProjectionExpression: "server_id"
             });
 
             const response = await this.docClient.send(command);
+            console.log('Server IDs response:', response);
+
             return response.Items.map(item => item.server_id);
         } catch (error) {
-            console.error("Error getting all server IDs:", error);
+            console.error('Detailed error in getAllServerIds:', {
+                error: error,
+                message: error.message,
+                stack: error.stack,
+                // AWS特有のエラー情報
+                awsErrorCode: error.$metadata?.httpStatusCode,
+                requestId: error.$metadata?.requestId
+            });
             throw error;
         }
     }
@@ -248,7 +265,7 @@ export class AWSWrapper {
             });
             const existingData = await this.docClient.send(getCommand);
             console.log('Existing data:', existingData);
-    
+
             if (!existingData.Item) {
                 // データが存在しない場合、新規作成
                 console.log('No existing data. Creating new entry.');
@@ -264,7 +281,7 @@ export class AWSWrapper {
                 console.log('PutCommand response:', putResponse);
                 return putResponse;
             }
-    
+
             // データが存在する場合、更新
             console.log('Updating existing data.');
             const updateCommand = new UpdateCommand({
@@ -282,7 +299,7 @@ export class AWSWrapper {
             const response = await this.docClient.send(updateCommand);
             console.log('UpdateCommand response:', response);
             return response.Attributes;
-    
+
         } catch (error) {
             console.error("Error updating user points:", error);
             throw new Error("Failed to update user points");
@@ -378,7 +395,7 @@ export class AWSWrapper {
             if (typeof updateData === 'string') {
                 updateData = JSON.parse(updateData);
             }
-    
+
             // 通知設定のバリデーション
             if (updateData.notification) {
                 const { enabled, type, channelId, messageTemplate } = updateData.notification;
@@ -391,13 +408,13 @@ export class AWSWrapper {
                     }
                 }
             }
-    
-            console.log('Updating automation rule with:', { 
-                serverId, 
-                ruleId, 
+
+            console.log('Updating automation rule with:', {
+                serverId,
+                ruleId,
                 updateData
             });
-                      
+
             // 複数ルールの一括更新の場合
             if (updateData.rules) {
                 const bulkUpdates = await Promise.all(
@@ -410,7 +427,7 @@ export class AWSWrapper {
                                 id: rule.id
                             }
                         }));
-    
+
                         // 既存のデータとマージ
                         const mergedRule = {
                             ...(existingRule.Item || {}),
@@ -418,31 +435,31 @@ export class AWSWrapper {
                             server_id: serverId,
                             updated_at: new Date().toISOString()
                         };
-    
+
                         const command = new PutCommand({
                             TableName: 'automation_rules',
                             Item: mergedRule
                         });
-    
+
                         await this.docClient.send(command);
                         return mergedRule;
                     })
                 );
-    
+
                 return {
                     success: true,
                     message: '複数のルールを更新しました',
                     rules: bulkUpdates
                 };
             }
-    
+
             // 単一ルールの更新の場合
             if (!ruleId && !updateData.id) {
                 throw new Error('Rule ID is required for single rule update');
             }
-    
+
             const targetRuleId = ruleId || updateData.id;
-    
+
             // 既存のルールを取得
             const getCommand = new GetCommand({
                 TableName: 'automation_rules',
@@ -451,13 +468,13 @@ export class AWSWrapper {
                     id: targetRuleId
                 }
             });
-    
+
             const existingRule = await this.docClient.send(getCommand);
-            
+
             if (!existingRule.Item) {
                 throw new Error('Rule not found');
             }
-    
+
             // 更新データを既存のデータとマージ
             const updatedRule = {
                 ...existingRule.Item,
@@ -466,15 +483,15 @@ export class AWSWrapper {
                 id: targetRuleId,
                 updated_at: new Date().toISOString()
             };
-    
+
             // 更新を実行
             const updateCommand = new PutCommand({
                 TableName: 'automation_rules',
                 Item: updatedRule
             });
-    
+
             await this.docClient.send(updateCommand);
-    
+
             return {
                 success: true,
                 message: 'ルールを更新しました',
@@ -485,7 +502,7 @@ export class AWSWrapper {
             throw new Error(`Failed to update automation rule: ${error.message}`);
         }
     }
-    
+
     async createAutomationRule(serverId, ruleData) {
         try {
             const now = new Date().toISOString();
@@ -500,12 +517,12 @@ export class AWSWrapper {
                 created_at: now,
                 updated_at: now
             };
-    
+
             const command = new PutCommand({
                 TableName: 'automation_rules',
                 Item: rule
             });
-    
+
             await this.docClient.send(command);
             return {
                 success: true,

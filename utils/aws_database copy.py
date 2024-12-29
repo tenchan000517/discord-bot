@@ -6,7 +6,6 @@ from boto3.dynamodb.conditions import Key
 from typing import Optional, Dict, List
 import asyncio
 import traceback
-from decimal import Decimal
 
 class AWSDatabase:
     def __init__(self):
@@ -104,7 +103,7 @@ class AWSDatabase:
                     'battle': True,
                     'fortune': True,
                     'rewards': True,
-                    'daily_point_limit': Decimal('0'),
+                    'daily_point_limit': 0,  # 1日のポイント上限
                     'notifications': {
                         'ranking_updated': True,
                         'points_earned': True
@@ -116,9 +115,9 @@ class AWSDatabase:
                     'enabled': True,
                     'items': [
                         {
-                            'name': 'URアイテム',
-                            'weight': Decimal('2'),
-                            'points': Decimal('200'),
+                            'name': 'URアイテム',  # 新規追加
+                            'weight': 2,
+                            'points': 200,
                             'image_url': 'https://nft-mint.xyz/gacha/ur.png',
                             'message_settings': {
                                 'enabled': True,
@@ -127,19 +126,19 @@ class AWSDatabase:
                         },
                         {
                             'name': 'SSRアイテム',
-                            'weight': Decimal('5'),
-                            'points': Decimal('100'),
-                            'image_url': 'https://nft-mint.xyz/gacha/ssr.png',
+                            'weight': 5,
+                            'points': 100,
+                            'image_url': '',
                             'message_settings': {
-                                'enabled': True,
-                                'message': '{item}を獲得しました！🎉'
+                                'enabled': True,  # メッセージを表示するかどうか
+                                'message': '{item}を獲得しました！🎉'  # デフォルトメッセージ
                             }
                         },
                         {
                             'name': 'SRアイテム',
-                            'weight': Decimal('15'),
-                            'points': Decimal('50'),
-                            'image_url': 'https://nft-mint.xyz/gacha/sr.png',
+                            'weight': 15,
+                            'points': 50,
+                            'image_url': '',
                             'message_settings': {
                                 'enabled': True,
                                 'message': '{item}です！✨'
@@ -147,9 +146,9 @@ class AWSDatabase:
                         },
                         {
                             'name': 'Rアイテム',
-                            'weight': Decimal('30'),
-                            'points': Decimal('30'),
-                            'image_url': 'https://nft-mint.xyz/gacha/r.png',
+                            'weight': 30,
+                            'points': 30,
+                            'image_url': '',
                             'message_settings': {
                                 'enabled': True,
                                 'message': '{item}を引きました！'
@@ -157,11 +156,11 @@ class AWSDatabase:
                         },
                         {
                             'name': 'Nアイテム',
-                            'weight': Decimal('48'),
-                            'points': Decimal('10'),
-                            'image_url': 'https://nft-mint.xyz/gacha/n.png',
+                            'weight': 50,
+                            'points': 10,
+                            'image_url': '',
                             'message_settings': {
-                                'enabled': False,
+                                'enabled': False,  # Nアイテムはデフォルトでメッセージ無し
                                 'message': '{item}です'
                             }
                         }
@@ -170,25 +169,26 @@ class AWSDatabase:
                         'setup': '**ガチャを回して運試し！**\n1日1回ガチャが回せるよ！',
                         'daily': '1日1回ガチャが回せます！\n下のボタンを押してガチャを実行してください。',
                         'win': None,
-                        'tweet_message': None
+                        'tweet_message': None  # 追加
                     },
-                    'use_daily_panel': False,
-                    'media': {
-                        'setup_image': 'https://nft-mint.xyz/gacha/gacha1.png',
-                        'banner_gif': 'https://nft-mint.xyz/gacha/gacha1.png',
-                        'gacha_animation_gif': 'https://nft-mint.xyz/gacha/gacha1.gif'
-                    }
+                        'use_daily_panel': False,  # デイリーパネルの使用有無
+                        'media': {
+                            'setup_image': 'https://nft-mint.xyz/gacha/gacha1.png',
+                            'banner_gif': 'https://nft-mint.xyz/gacha/gacha1.gif',
+                            'gacha_animation_gif': 'https://nft-mint.xyz/gacha/gacha1.gif'  # アニメーション用のGIF
+                        }
                 },
                 'battle': {
                     'enabled': True,
                     'required_role_id': None,
                     'winner_role_id': None,
                     'points_enabled': True,
-                    'points_per_kill': Decimal('10'),
-                    'winner_points': Decimal('100'),
-                    'start_delay_minutes': Decimal('2')
+                    'points_per_kill': 10,
+                    'winner_points': 100,
+                    'start_delay_minutes': 2
                 },
                 'fortune': {'enabled': True, 'custom_messages': {}},
+                            # 報酬機能の設定を追加
                 'rewards': {
                     'enabled': True,
                     'web3': {
@@ -202,11 +202,11 @@ class AWSDatabase:
                         'api_url': ''
                     },
                     'limits': {
-                        'min_points_coupon': Decimal('100'),
-                        'max_points_coupon': Decimal('1000'),
-                        'min_points_nft': Decimal('1000'),
-                        'min_points_token': Decimal('500'),
-                        'token_conversion_rate': Decimal('0.1')
+                        'min_points_coupon': 100,
+                        'max_points_coupon': 1000,
+                        'min_points_nft': 1000,
+                        'min_points_token': 500,
+                        'token_conversion_rate': 0.1
                     }
                 },
                 'point_consumption': {
@@ -217,7 +217,7 @@ class AWSDatabase:
                     'mention_role_ids': [],
                     'use_thread': False,
                     'completion_message_enabled': True,
-                    'required_points': Decimal('0'),
+                    'required_points': 0,
                     'gain_history_enabled': False,
                     'gain_history_channel_id': None,
                     'consumption_history_enabled': False,
@@ -229,7 +229,7 @@ class AWSDatabase:
                 }            
             },
             'updated_at': datetime.now(pytz.timezone('Asia/Tokyo')).isoformat(),
-            'version': Decimal('1')
+            'version': 1
         }
 
     async def get_server_user_rankings(self, server_id: str) -> List[Dict]:
@@ -646,32 +646,30 @@ class AWSDatabase:
     # utils/aws_database.py に追加
 
     async def register_server(self, server_id: str):
-        """サーバーIDをserver_settingsテーブルに登録"""
+        """サーバーIDをDynamoDBに登録"""
         try:
-            # 既存の設定を確認
-            response = await asyncio.to_thread(
-                self.settings_table.get_item,
-                Key={'server_id': str(server_id)}
+            response = await self.table.put_item(
+                Item={
+                    'server_id': server_id,
+                    'joined_at': str(datetime.utcnow())
+                },
+                ConditionExpression='attribute_not_exists(server_id)'
             )
-            
-            # 設定が存在しない場合のみ、デフォルト設定を作成
-            if 'Item' not in response:
-                default_settings = self._create_default_settings(server_id)
-                await asyncio.to_thread(
-                    self.settings_table.put_item,
-                    Item=default_settings
-                )
+            return True
+        except self.table.meta.client.exceptions.ConditionalCheckFailedException:
+            # 既に登録済みの場合は無視
             return True
         except Exception as e:
             print(f"Error registering server {server_id}: {e}")
             raise
 
     async def remove_server(self, server_id: str):
-        """サーバーIDをserver_settingsテーブルから削除"""
+        """サーバーIDをDynamoDBから削除"""
         try:
-            await asyncio.to_thread(
-                self.settings_table.delete_item,
-                Key={'server_id': str(server_id)}
+            response = await self.table.delete_item(
+                Key={
+                    'server_id': server_id
+                }
             )
             return True
         except Exception as e:

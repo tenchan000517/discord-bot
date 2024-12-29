@@ -32,7 +32,7 @@ class MessageSettings:
     setup: str
     daily: str
     win: str
-    custom_messages: Dict[str, str]
+    custom_messages: Dict[str, str] = None  # デフォルト値を None に設定
     tweet_message: Optional[str] = None  # 追加: X投稿用メッセージ
 
     def to_dict(self):

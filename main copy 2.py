@@ -99,63 +99,40 @@ class GachaBot(commands.Bot):
 
     async def on_ready(self):
         print(f'{self.user} has connected to Discord!')
+
+        if self.db_available:
+            print("Registering existing servers...")
+            await self.db.register_existing_servers(self.guilds, self.settings_manager)
+
         print(f'Bot is ready in {len(self.guilds)} servers.')
         print(f"Database status: {'Available' if self.db_available else 'Unavailable'}")
 
-        # 全サーバーの設定をデバッグ出力（必要ならループする）
-        for guild in self.guilds:
-            print(f"[DEBUG] Loading settings for guild {guild.name} (ID: {guild.id})")
-            settings = await self.get_server_settings(str(guild.id))
-            if settings:
-                print(f"[DEBUG] settings for {guild.id}: {settings}")
-            else:
-                print(f"[DEBUG] No settings found for guild {guild.id}")
-
-
     async def get_server_settings(self, guild_id: str):
         """サーバー設定を取得するヘルパーメソッド"""
-        print(f"[DEBUG] 取得するサーバーID: {guild_id}")
-
         if not self.db_available:
-            print("[DEBUG] Database is unavailable.")
             return None
-
-        try:
-            settings = await self.settings_manager.get_settings(str(guild_id))
-            print(f"[DEBUG] settings: {settings}")
-
-            # gacha_settings の抽出
-            gacha_settings = settings.gacha_settings if settings else None
-            print(f"[DEBUG] gacha_settings: {gacha_settings}")
-
-            return settings
-        except Exception as e:
-            print(f"[ERROR] Error retrieving server settings for guild {guild_id}: {e}")
-            print(traceback.format_exc())
-            return None
-
-            
+        return await self.settings_manager.get_settings(str(guild_id))  # awaitを追加
+    
     # main.py内のGachaBotクラスに追加
 
     async def on_guild_join(self, guild):
-        """新しいサーバーに参加した時の処理"""
-        try:
-            # データベースが利用可能か確認
-            if not self.db_available:
-                print(f"Warning: Database unavailable. Could not register server {guild.id}")
-                return
+            """新しいサーバーに参加した時の処理"""
+            try:
+                # データベースが利用可能か確認
+                if not self.db_available:
+                    print(f"Warning: Database unavailable. Could not register server {guild.id}")
+                    return
 
-            # サーバーIDを登録
-            await self.db.register_server(str(guild.id))
-            print(f"Successfully registered new server: {guild.name} (ID: {guild.id})")
+                # サーバーの登録と初期設定を同時に行う
+                success = await self.db.register_server_with_settings(str(guild.id), self.settings_manager)
+                if success:
+                    print(f"Successfully registered new server: {guild.name} (ID: {guild.id})")
+                else:
+                    print(f"Failed to register server: {guild.name} (ID: {guild.id})")
 
-            # 初期設定も同時に作成（必要に応じて）
-            await self.settings_manager.create_default_settings(str(guild.id))
-            print(f"Created default settings for server: {guild.name}")
-
-        except Exception as e:
-            print(f"Error registering new server {guild.id}: {e}")
-            print(traceback.format_exc())
+            except Exception as e:
+                print(f"Error registering new server {guild.id}: {e}")
+                print(traceback.format_exc())
 
     async def on_guild_remove(self, guild):
         """サーバーから削除された時の処理"""
@@ -164,7 +141,7 @@ class GachaBot(commands.Bot):
                 print(f"Warning: Database unavailable. Could not remove server {guild.id}")
                 return
 
-            # サーバーIDを削除（オプション）
+            # サーバーIDを削除
             await self.db.remove_server(str(guild.id))
             print(f"Successfully removed server: {guild.name} (ID: {guild.id})")
 

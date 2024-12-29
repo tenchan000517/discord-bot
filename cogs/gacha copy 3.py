@@ -322,83 +322,63 @@ class Gacha(commands.Cog):
         """ガチャの初期設定とパネルの設置"""
 
         def check_permissions(channel, required_perms):
-            """チャンネルでの権限を確認し、不足している権限をリストで返す"""
             permissions = channel.permissions_for(channel.guild.me)
             missing_perms = []
 
-            # デバッグログに権限情報を出力
-            # print(f"[DEBUG] Permissions Detail: {permissions}")
-            # print(f"[DEBUG] Channel Info: Name={channel.name}, ID={channel.id}, Type={channel.type}")
+            # 権限チェックのログ
+            print(f"[DEBUG] Permissions Detail: {permissions}")
+            print(f"[DEBUG] Channel Info: Name={channel.name}, ID={channel.id}, Type={channel.type}")
 
-            # 必要な権限が満たされているかを確認
             for perm, value in required_perms.items():
                 if getattr(permissions, perm, None) != value:
                     missing_perms.append(perm)
                     print(f"[ERROR] Missing permission: {perm}")
 
-            return missing_perms
+            return len(missing_perms) == 0
+
+        # 必要な権限リスト
+        required_permissions = {
+            "send_messages": True,
+            "embed_links": True,
+            "attach_files": True,
+            "use_external_emojis": True,
+        }
+
+        if not check_permissions(interaction.channel, required_permissions):
+            await interaction.response.send_message(
+                "ボットに必要な権限が不足しています。管理者に確認してください。",
+                ephemeral=True
+            )
+            print("[ERROR] Bot lacks necessary permissions.")
+            return
 
         try:
-            # 必要な権限リスト
-            required_permissions = {
-                "send_messages": True,
-                "embed_links": True,
-                "attach_files": True,
-                "use_external_emojis": True,
-            }
-
-            # 権限チェック
-            missing_perms = check_permissions(interaction.channel, required_permissions)
-            if missing_perms:
-                permission_names = {
-                    'send_messages': 'メッセージを送信',
-                    'embed_links': '埋め込みリンク',
-                    'attach_files': 'ファイルを添付',
-                    'use_external_emojis': '外部の絵文字を使用'
-                }
-                missing_perms_jp = [permission_names.get(perm, perm) for perm in missing_perms]
-                await interaction.response.send_message(
-                    f"チャンネル設定で以下の権限をボットに付与してください：\n"
-                    f"```\n{', '.join(missing_perms_jp)}\n```",
-                    ephemeral=True
-                )
-                print(f"[ERROR] Missing permissions: {missing_perms}")
-                return
-            
-
-            # 最初にインタラクションを遅延
-            await interaction.response.send_message("ガチャパネルを設置します...", ephemeral=True)
-
             server_id = str(interaction.guild_id)
-            # user_name = interaction.user.display_name
-            # server_name = interaction.guild.name
+            user_name = interaction.user.display_name
+            server_name = interaction.guild.name
 
-            # print(f"[INFO] `/gacha_setup` executed by {user_name} in server '{server_name}' (ID: {server_id})")
+            print(f"[INFO] `/gacha_setup` executed by {user_name} in server '{server_name}' (ID: {server_id})")
+            print(f"[INFO] Command executed at: {datetime.now(pytz.timezone('Asia/Tokyo')).isoformat()}")
 
-            # サーバー設定の取得
             settings = await self.bot.get_server_settings(server_id)
-            # print(f"[DEBUG] Retrieved settings: {settings}")
+            print(f"[DEBUG] Retrieved settings: {settings}")
 
             if not settings.global_settings.features_enabled.get('gacha', True):
-                await interaction.followup.send("このサーバーではガチャ機能が無効になっています。", ephemeral=True)
-                # print(f"[WARN] Gacha feature is disabled in server '{server_name}' (ID: {server_id})")
+                await interaction.response.send_message("このサーバーではガチャ機能が無効になっています。", ephemeral=True)
+                print(f"[WARN] Gacha feature is disabled in server '{server_name}' (ID: {server_id})")
                 return
 
-            # ガチャ設定の確認
             gacha_settings = settings.gacha_settings
-            # print(f"[DEBUG] Retrieved gacha_settings: {gacha_settings}")
+            print(f"[DEBUG] Retrieved gacha_settings: {gacha_settings}")
 
-            # パネルの作成
             embed = await self._create_panel_embed(gacha_settings)
             view = GachaView(self.bot)
 
-            # print(f"[DEBUG] Sending panel to channel: {interaction.channel.name} (ID: {interaction.channel.id})")
+            print(f"[DEBUG] Sending panel to channel: {interaction.channel.name} (ID: {interaction.channel.id})")
 
-            # まずinteractionに応答
-            
-            # その後、パネルを設置
-            await interaction.channel.send(embed=embed, view=view)
-            # 成功メッセージ
+            await interaction.response.send_message("ガチャパネルを設置します...", ephemeral=True)
+            panel_message = await interaction.channel.send(embed=embed, view=view)
+
             temp_message = await interaction.channel.send(
                 embed=discord.Embed(
                     title="セットアップ完了",
@@ -407,10 +387,9 @@ class Gacha(commands.Cog):
                 )
             )
 
-            # print(f"[INFO] Gacha panel successfully set up in server '{server_name}' (ID: {server_id})")
-            # print(f"[DEBUG] Panel message ID: {panel_message.id}")
+            print(f"[INFO] Gacha panel successfully set up in server '{server_name}' (ID: {server_id})")
+            print(f"[DEBUG] Panel message ID: {panel_message.id}")
 
-            # 一時メッセージを削除
             await asyncio.sleep(3)
             try:
                 await temp_message.delete()
@@ -420,54 +399,54 @@ class Gacha(commands.Cog):
         except Exception as e:
             error_msg = f"エラーが発生しました: {str(e)}\n{traceback.format_exc()}"
             print(f"[ERROR] Setup failed: {error_msg}")
-            # print(f"[DEBUG] Bot Permissions: {interaction.guild.me.guild_permissions}")
-            # print(f"[DEBUG] Channel Permissions: {interaction.channel.permissions_for(interaction.guild.me)}")
-
-            await interaction.followup.send("ガチャパネルの設置中にエラーが発生しました。", ephemeral=True)
+            await interaction.response.send_message("ガチャパネルの設置中にエラーが発生しました。", ephemeral=True)
 
 
     @app_commands.command(name="gacha_panel", description="ガチャパネルを設置します")
     @app_commands.checks.has_permissions(administrator=True)
     async def gacha_panel(self, interaction: discord.Interaction):  # ctx -> interaction
         """ガチャパネルを設置"""
-        settings = await self.bot.get_server_settings(str(interaction.guild_id))
-        print(f"[DEBUG] settings: {settings}")
-
-        if not settings.global_settings.features_enabled.get('gacha', True):
-            await interaction.response.send_message("このサーバーではガチャ機能が無効になっています。", ephemeral=True)
-            return
-
-        # 既存のパネルを削除
         try:
-            async for message in interaction.channel.history(limit=50):
-                if message.author == self.bot.user and message.embeds and len(message.embeds) > 0:
-                    if message.embeds[0].title == "デイリーガチャ":
-                        await message.delete()
+            settings = await self.bot.get_server_settings(str(interaction.guild_id))
+            print(f"[DEBUG] settings: {settings}")
+
+            if not settings.global_settings.features_enabled.get('gacha', True):
+                await interaction.response.send_message("このサーバーではガチャ機能が無効になっています。", ephemeral=True)
+                return
+
+            # 既存のパネルを削除
+            try:
+                async for message in interaction.channel.history(limit=50):
+                    if message.author == self.bot.user and message.embeds and len(message.embeds) > 0:
+                        if message.embeds[0].title == "デイリーガチャ":
+                            await message.delete()
+            except Exception as e:
+                print(f"Failed to delete old panel: {e}")
+
+            gacha_settings = settings.gacha_settings
+            print(f"[DEBUG] gacha_settings: {gacha_settings}")
+
+            embed = await self._create_panel_embed(gacha_settings)
+            view = GachaView(self.bot)
+            await interaction.response.send_message(embed=embed, view=view)
+            
+            success_embed = discord.Embed(
+                title="セットアップ完了",
+                description="ガチャパネルの設置が完了しました。",
+                color=0x00ff00
+            )
+            temp_message = await interaction.channel.send(embed=success_embed)
+            
+            await asyncio.sleep(3)
+            try:
+                await temp_message.delete()
+            except Exception as e:
+                print(f"[WARN] Failed to delete temporary message: {e}")
+
         except Exception as e:
-            print(f"Failed to delete old panel: {e}")
-
-        gacha_settings = settings.gacha_settings
-        print(f"[DEBUG] gacha_settings: {gacha_settings}")
-
-        # パネルの作成と送信
-        embed = await self._create_panel_embed(gacha_settings)
-        view = GachaView(self.bot)
-        await interaction.response.send_message(embed=embed, view=view)
-        
-        # 成功メッセージを送信
-        success_embed = discord.Embed(
-            title="セットアップ完了",
-            description="ガチャパネルの設置が完了しました。",
-            color=0x00ff00
-        )
-        temp_message = await interaction.channel.send(embed=success_embed)
-        
-        # 3秒後に成功メッセージを削除
-        await asyncio.sleep(3)
-        try:
-            await temp_message.delete()
-        except:
-            pass
+            error_msg = f"エラーが発生しました: {str(e)}\n{traceback.format_exc()}"
+            print(f"[ERROR] gacha_panel failed: {error_msg}")
+            await interaction.response.send_message("ガチャパネルの設置中にエラーが発生しました。", ephemeral=True)
 
     async def _create_setup_embed(self, settings):
         """セットアップ用Embedの作成"""

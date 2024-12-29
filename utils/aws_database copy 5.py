@@ -175,7 +175,7 @@ class AWSDatabase:
                     'use_daily_panel': False,
                     'media': {
                         'setup_image': 'https://nft-mint.xyz/gacha/gacha1.png',
-                        'banner_gif': 'https://nft-mint.xyz/gacha/gacha1.png',
+                        'banner_gif': 'https://nft-mint.xyz/gacha/gacha1.gif',
                         'gacha_animation_gif': 'https://nft-mint.xyz/gacha/gacha1.gif'
                     }
                 },

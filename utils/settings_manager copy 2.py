@@ -14,26 +14,13 @@ class ServerSettingsManager:
         #     return self.settings_cache[server_id]
 
         settings_data = await self.db.get_server_settings(server_id)
-        print(f"[DEBUG] Raw settings data for guild {server_id}: {settings_data}")
-
         if not settings_data:
             settings = self._create_default_settings(server_id)
         else:
-            # 不完全なデータを補完
-            feature_settings = settings_data.get('feature_settings', {})
-            gacha_settings = feature_settings.get('gacha', {})
-            if 'messages' not in gacha_settings:
-                print("[DEBUG] Incomplete gacha settings detected, adding defaults")
-                gacha_settings['messages'] = {
-                    'setup': '',
-                    'daily': '',
-                    'win': '',
-                    'custom_messages': {}
-                }
             settings = ServerSettings.from_dict(settings_data)
 
-            self.settings_cache[server_id] = settings
-            return settings
+        self.settings_cache[server_id] = settings
+        return settings
 
     async def update_feature_settings(self, server_id: str, feature: str, new_settings: Dict[str, Any]) -> bool:
         """機能別の設定を更新"""
@@ -48,12 +35,7 @@ class ServerSettingsManager:
 
             # 機能別の設定を更新
             if feature == 'gacha':
-                messages = MessageSettings(
-                    setup=new_settings['messages'].get('setup', ''),  # デフォルト値を設定
-                    daily=new_settings['messages'].get('daily', ''),  # デフォルト値を設定
-                    win=new_settings['messages'].get('win', ''),  # デフォルト値を設定
-                    custom_messages=new_settings['messages'].get('custom_messages', {})  # デフォルト値を設定
-                ) if new_settings.get('messages') else None
+                messages = MessageSettings(**new_settings['messages']) if new_settings.get('messages') else None
                 media = MediaSettings(**new_settings['media']) if new_settings.get('media') else None
                 
                 updated_settings.gacha_settings = GachaFeatureSettings(
@@ -89,7 +71,8 @@ class ServerSettingsManager:
         except Exception as e:
             print(f"Error updating settings: {e}")
             return False
-
+        
+    # ここに新しいメソッドを追加
     async def create_default_settings(self, server_id: str) -> bool:
         """デフォルト設定を作成して保存"""
         try:

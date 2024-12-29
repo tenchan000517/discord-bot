@@ -537,7 +537,7 @@ const ServerDashboard = () => {
               {/* ボタン類 */}
               <div className="flex justify-end items-center gap-4 w-full lg:w-auto order-1 lg:order-none">
                 <a
-                  href="https://discord.com/oauth2/authorize?client_id=1313859672826052679&permissions=563345359760448&integration_type=0&scope=bot+applications.commands"
+                  href="https://discord.com/oauth2/authorize?client_id=1313859672826052679&permissions=395406339152&integration_type=0&scope=bot+applications.commands"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-2 px-4 py-2 bg-[#5865F2] hover:bg-[#4752C4] text-white rounded-lg transition-colors"
