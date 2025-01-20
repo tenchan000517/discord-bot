@@ -92,7 +92,7 @@ class PointManager:
                 return False
                 
             # ポイントを更新
-            success = await self.db.update_feature_points(user_id, server_id, points, unit_id)
+            success = await self.db.update_feature_points(user_id, server_id, new_total, unit_id)
             
             if success:
 
