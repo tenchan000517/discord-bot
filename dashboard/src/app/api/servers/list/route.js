@@ -43,7 +43,7 @@ export async function GET() {
 
   try {
     const userGuilds = await fetchDiscordServers(session);
-    console.log("Discord Guilds:", userGuilds);
+    // console.log("Discord Guilds:", userGuilds);
 
     const aws = new AWSWrapper();
     const botServers = await aws.getAllServerIds();
@@ -54,16 +54,16 @@ export async function GET() {
       const isInBotServers = botServers.includes(guild.id);
       const hasAdminPermission = (BigInt(guild.permissions) & BigInt(0x8)) === BigInt(0x8);
       
-      console.log(`Server ${guild.name} (${guild.id}):`, {
-        isInBotServers,
-        hasAdminPermission,
-        permissions: guild.permissions
-      });
+      // console.log(`Server ${guild.name} (${guild.id}):`, {
+      //   isInBotServers,
+      //   hasAdminPermission,
+      //   permissions: guild.permissions
+      // });
       
       return isInBotServers && hasAdminPermission;
     });
 
-    console.log("Final available servers:", availableServers);
+    // console.log("Final available servers:", availableServers);
 
     return NextResponse.json({ 
       servers: availableServers.map(guild => ({

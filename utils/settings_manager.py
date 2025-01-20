@@ -1,7 +1,9 @@
-from models.server_settings import ServerSettings, GachaFeatureSettings, BattleFeatureSettings, FortuneFeatureSettings
-from models.server_settings import MessageSettings, MediaSettings
+from models.server_settings import ServerSettings, GachaFeatureSettings, BattleFeatureSettings, FortuneFeatureSettings, PointConsumptionFeatureSettings, PointConsumptionModalSettings
+from models.server_settings import MessageSettings, MediaSettings, GachaSettings
 from typing import Optional, Dict, Any
 import copy
+from decimal import Decimal
+from utils.default_settings import create_default_settings
 
 class ServerSettingsManager:
     def __init__(self, db):
@@ -10,30 +12,15 @@ class ServerSettingsManager:
 
     async def get_settings(self, server_id: str) -> Optional[ServerSettings]:
         """サーバー設定を取得"""
-        # if server_id in self.settings_cache:
-        #     return self.settings_cache[server_id]
-
         settings_data = await self.db.get_server_settings(server_id)
-        print(f"[DEBUG] Raw settings data for guild {server_id}: {settings_data}")
 
         if not settings_data:
-            settings = self._create_default_settings(server_id)
-        else:
-            # 不完全なデータを補完
-            feature_settings = settings_data.get('feature_settings', {})
-            gacha_settings = feature_settings.get('gacha', {})
-            if 'messages' not in gacha_settings:
-                print("[DEBUG] Incomplete gacha settings detected, adding defaults")
-                gacha_settings['messages'] = {
-                    'setup': '',
-                    'daily': '',
-                    'win': '',
-                    'custom_messages': {}
-                }
-            settings = ServerSettings.from_dict(settings_data)
-
-            self.settings_cache[server_id] = settings
-            return settings
+            # デフォルト設定は作成せず、Noneを返す
+            return None
+        
+        settings = ServerSettings.from_dict(settings_data)
+        self.settings_cache[server_id] = settings
+        return settings
 
     async def update_feature_settings(self, server_id: str, feature: str, new_settings: Dict[str, Any]) -> bool:
         """機能別の設定を更新"""
@@ -66,6 +53,11 @@ class ServerSettingsManager:
                 updated_settings.battle_settings = BattleFeatureSettings(**new_settings)
             elif feature == 'fortune':
                 updated_settings.fortune_settings = FortuneFeatureSettings(**new_settings)
+            elif feature == 'point_consumption':
+                modal_settings = PointConsumptionModalSettings(**new_settings.get('modal_settings', {})) if new_settings.get('modal_settings') else None
+                updated_settings.point_consumption_settings = PointConsumptionFeatureSettings(
+                    **{**new_settings, 'modal_settings': modal_settings}
+                )  
             else:
                 return False
 
@@ -82,14 +74,25 @@ class ServerSettingsManager:
     async def update_settings(self, server_id: str, settings: ServerSettings) -> bool:
         """サーバー設定全体を更新"""
         try:
+            # print(f"[DEBUG] Type of settings in update_settings: {type(settings)}")
+            # print(f"[DEBUG] settings in update_settings: {settings}")
+
             success = await self.db.update_server_settings(server_id, settings.to_dict())
+
+            if isinstance(settings, ServerSettings):
+                settings_dict = settings.to_dict()
+                print(f"[DEBUG] settings.to_dict() result: {settings_dict}")
+            else:
+                print("[ERROR] settings is not a ServerSettings object")
+
             if success:
                 self.settings_cache[server_id] = settings
             return success
         except Exception as e:
             print(f"Error updating settings: {e}")
             return False
-
+        
+    # ボット招待後２番目に仕事する aws_databaseのonguild_serverより呼び出される
     async def create_default_settings(self, server_id: str) -> bool:
         """デフォルト設定を作成して保存"""
         try:
@@ -104,30 +107,8 @@ class ServerSettingsManager:
         except Exception as e:
             print(f"Error creating default settings: {e}")
             return False
-
+    
     def _create_default_settings(self, server_id: str) -> ServerSettings:
         """デフォルトのサーバー設定を作成"""
-        default_messages = MessageSettings(
-            setup='ガチャへようこそ！\nここではさまざまなアイテムを獲得できます。',
-            daily='{user}さんがガチャを引きました！',
-            win='おめでとうございます！{user}さんが{item}を獲得しました！',
-            custom_messages={}
-        )
-        
-        default_media = MediaSettings(
-            setup_image=None,
-            banner_gif=None
-        )
-
-        return ServerSettings(
-            server_id=server_id,
-            global_settings=None,  # デフォルト値はServerSettingsクラスで設定
-            gacha_settings=GachaFeatureSettings(
-                enabled=True,
-                messages=default_messages,
-                media=default_media,
-                items=[]
-            ),
-            battle_settings=BattleFeatureSettings(),
-            fortune_settings=FortuneFeatureSettings()
-        )
+        settings_dict = create_default_settings(server_id)
+        return ServerSettings.from_dict(settings_dict)

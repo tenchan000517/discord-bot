@@ -1,99 +1,131 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Save, X, AlertCircle } from 'lucide-react';
+import { getPointsByUnitId } from '@/utils/gachaHelper';
 
-export const UserPointsForm = ({ user, pointUnit, onSave, onCancel }) => {
-  // 数値型として初期値を設定
+export const UserPointsForm = ({ 
+    user, 
+    pointUnit, 
+    selectedUnitId, 
+    onSave, 
+    onCancel 
+}) => {
+    // 初期値の設定
+    const [points, setPoints] = useState(() => {
+        const currentPoints = getPointsByUnitId(user.points, selectedUnitId);
+        return currentPoints === 0 ? '' : currentPoints.toString();
+    });
+    
+    const [error, setError] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
-  console.log('User points raw:', user.points);
-  console.log('User points type:', typeof user.points);
-  if (typeof user.points === 'object') {
-    console.log('User points toString:', user.points.toString());
-    console.log('User points valueOf:', user.points.valueOf());
-  }
+    // ユーザーまたはユニットが変更された場合にポイントを更新
+    useEffect(() => {
+        const currentPoints = getPointsByUnitId(user.points, selectedUnitId);
+        setPoints(currentPoints === 0 ? '' : currentPoints.toString());
+    }, [user.points, selectedUnitId]);
 
-  const [points, setPoints] = useState(() => {
-    // Decimalオブジェクト、数値、文字列のいずれの場合も適切に処理
-    if (user.points) {
-      if (typeof user.points === 'object' && user.points.toString) {
-        return Number(user.points.toString());
-      }
-      return Number(user.points);
-    }
-    return 0;
-  });
-  const [error, setError] = useState('');
+    const validatePoints = (value) => {
+        if (value === '') return null;
+        
+        const numValue = Number(value);
+        if (isNaN(numValue)) {
+            return '無効な値が入力されました';
+        }
+        if (numValue < 0) {
+            return 'ポイントは0以上である必要があります';
+        }
+        if (!Number.isInteger(numValue)) {
+            return 'ポイントは整数である必要があります';
+        }
+        if (numValue > 999999999) {
+            return 'ポイントが大きすぎます';
+        }
+        return null;
+    };
 
-  const handleChange = (e) => {
-    const rawValue = e.target.value; // 入力値の文字列を取得
-    const trimmedValue = rawValue.trim(); // トリミングして空白を除去
-    const numValue = trimmedValue === '' ? 0 : Number(trimmedValue); // 数値に変換
-  
-    console.log('Raw input value:', rawValue); // 生の入力値をログ
-    console.log('Trimmed input value:', trimmedValue);
-    console.log('Parsed number value:', numValue);
-  
-    if (isNaN(numValue)) {
-      setError('無効な値が入力されました');
-    } else if (numValue < 0) {
-      setError('ポイントは0以上である必要があります');
-    } else {
-      setError('');
-    }
-  
-    setPoints(trimmedValue); // 入力値をセット（数値ではなく文字列として保持）
-  };
-  
+    const handleChange = (e) => {
+        const value = e.target.value.trim();
+        setPoints(value);
+        
+        const validationError = validatePoints(value);
+        setError(validationError || '');
+    };
 
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (error || isSubmitting) return;
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (error) return;
-    onSave(user.user_id, points);
-  };
+        try {
+            setIsSubmitting(true);
+            const numericPoints = points === '' ? 0 : Number(points);
+            await onSave(user.user_id, numericPoints);
+        } catch (err) {
+            setError('ポイントの更新に失敗しました');
+            console.error('Error saving points:', err);
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
 
-  return (
-    <form onSubmit={handleSubmit} className="w-full">
-      <div className="space-y-3">
-        <div className="flex items-center gap-2">
-          <input
-            type="number"
-            name="points"
-            value={points === 0 ? '' : points} // 初期値やリセット時の空文字対応
-            onChange={handleChange}
-            min="0"
-            className="w-full px-2 py-1 border rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-            placeholder="ポイント"
-          />
+    const handleKeyDown = (e) => {
+        if (e.key === 'Enter' && !error) {
+            handleSubmit(e);
+        } else if (e.key === 'Escape') {
+            onCancel();
+        }
+    };
 
-          <span className="text-sm text-gray-600 whitespace-nowrap">{pointUnit}</span>
-        </div>
+    return (
+        <form onSubmit={handleSubmit} className="w-full">
+            <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                    <input
+                        type="text"
+                        pattern="[0-9]*"
+                        inputMode="numeric"
+                        value={points}
+                        onChange={handleChange}
+                        onKeyDown={handleKeyDown}
+                        className={`w-full px-2 py-1 border rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none ${
+                            error ? 'border-red-500' : ''
+                        }`}
+                        placeholder="0"
+                        disabled={isSubmitting}
+                        aria-label={`${pointUnit}を入力`}
+                    />
+                    <span className="text-sm text-gray-600 whitespace-nowrap">
+                        {pointUnit}
+                    </span>
+                </div>
 
-        {error && (
-          <div className="flex items-center gap-1.5 text-red-600 text-xs">
-            <AlertCircle className="w-3.5 h-3.5" />
-            <span>{error}</span>
-          </div>
-        )}
+                {error && (
+                    <div className="flex items-center gap-1.5 text-red-600 text-xs">
+                        <AlertCircle className="w-3.5 h-3.5" />
+                        <span>{error}</span>
+                    </div>
+                )}
 
-        <div className="flex justify-end gap-2 mt-3">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="px-2 py-1 text-sm rounded text-gray-600 hover:bg-gray-100 transition-colors"
-          >
-            <span className="sr-only">キャンセル</span>
-            <X className="w-4 h-4" />
-          </button>
-          <button
-            type="submit"
-            disabled={!!error}
-            className="px-2 py-1 text-sm rounded text-green-600 hover:bg-green-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <span className="sr-only">保存</span>
-            <Save className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
-    </form>
-  );
+                <div className="flex justify-end gap-2">
+                    <button
+                        type="button"
+                        onClick={onCancel}
+                        disabled={isSubmitting}
+                        className="px-2 py-1 text-sm rounded text-gray-600 hover:bg-gray-100 transition-colors disabled:opacity-50"
+                    >
+                        <span className="sr-only">キャンセル</span>
+                        <X className="w-4 h-4" />
+                    </button>
+                    <button
+                        type="submit"
+                        disabled={!!error || isSubmitting}
+                        className={`px-2 py-1 text-sm rounded text-green-600 hover:bg-green-50 transition-colors 
+                            ${(error || isSubmitting) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                        <span className="sr-only">保存</span>
+                        <Save className="w-4 h-4" />
+                    </button>
+                </div>
+            </div>
+        </form>
+    );
 };

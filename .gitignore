@@ -70,3 +70,11 @@ DOC/
 /version
 
 version/
+
+/dashboard
+
+dashboard/
+
+dynamodb_backup/
+
+/dynamodb_backup

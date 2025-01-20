@@ -10,6 +10,7 @@ import {
     DeleteCommand  // 追加
 } from "@aws-sdk/lib-dynamodb";
 import { v4 as uuidv4 } from 'uuid';  // UUIDの生成に使用
+import { normalizePointType, normalizeUserPointsStructure } from '@/utils/gachaHelper';
 
 export class AWSWrapper {
     constructor() {
@@ -119,6 +120,12 @@ export class AWSWrapper {
         }
     }
 
+    /**
+     * サーバーのランキングデータを取得する
+     * @param {string} serverId - サーバーID
+     * @param {number} limit - 取得件数制限
+     * @returns {Promise<Array>} 正規化されたランキングデータ
+     */
     async getServerRankings(serverId, limit = 10) {
         try {
             const command = new QueryCommand({
@@ -131,24 +138,21 @@ export class AWSWrapper {
             });
             const response = await this.docClient.send(command);
 
-            // ポイントフィールドの型を確認して正規化
+            // データの正規化処理
             const normalizedRankings = response.Items.map(user => {
-                let points = user.points;
+                // PKからunit_idを抽出
+                const pkParts = user.pk.split('#');
+                const unitId = pkParts.includes('UNIT') ?
+                    pkParts[pkParts.indexOf('UNIT') + 1] :
+                    "1";  // デフォルトのunit_id
 
-                if (typeof points === 'string') {
-                    // 文字列を数値に変換
-                    points = Number(points);
-                } else if (points && typeof points === 'object' && points.valueOf) {
-                    // Decimal 型の場合、数値に変換
-                    points = Number(points.valueOf());
-                } else if (typeof points !== 'number') {
-                    // 型が不明な場合、デフォルト値を設定
-                    points = 0;
-                }
+                // ポイントデータの構造を正規化
+                const normalizedPoints = normalizeUserPointsStructure(user.points, unitId);
 
                 return {
                     ...user,
-                    points, // 正規化済みのポイント
+                    points: normalizedPoints,
+                    unit_id: user.unit_id || unitId  // 明示的なunit_idまたはPKから抽出したもの
                 };
             });
 
@@ -204,23 +208,67 @@ export class AWSWrapper {
         }
     }
 
-    // サーバー設定の更新
+    /**
+     * サーバー設定を更新します
+     * @param {string} serverId - 更新対象のサーバーID
+     * @param {Object} settings - 更新する設定オブジェクト
+     * @param {Object} [settings.global_settings] - グローバル設定
+     * @param {Object} [settings.subscription_settings] - サブスクリプション設定
+     * @param {string} [settings.subscription_settings.tier] - サブスクリプションティア ('free'|'premium'|'enterprise')
+     * @param {Object} [settings.subscription_settings.features] - 機能の有効/無効設定
+     * @param {boolean} [settings.subscription_settings.features.point_history] - ポイント履歴機能の有効/無効
+     * @param {boolean} [settings.subscription_settings.features.advanced_analytics] - 高度な分析機能の有効/無効
+     * @param {boolean} [settings.subscription_settings.features.custom_branding] - カスタムブランディング機能の有効/無効
+     * @param {number} [settings.subscription_settings.features.max_gacha_items] - ガチャアイテムの最大数
+     * @param {number} [settings.subscription_settings.features.max_point_types] - ポイントタイプの最大数
+     * @param {string|null} [settings.subscription_settings.expires_at] - サブスクリプションの有効期限（ISO8601形式）
+     * @param {string} [settings.subscription_status] - サブスクリプションのステータス ('free'|'premium'|'enterprise')
+     * @param {number} [settings.version] - 設定のバージョン番号
+     * @returns {Promise<Object>} 更新後の設定オブジェクト
+     * @throws {Error} 設定の更新に失敗した場合
+     */
     async updateServerSettings(serverId, settings) {
         try {
+            // 更新式とパラメータを動的に構築
+            let updateExpression = 'SET ';
+            const expressionAttributeValues = {};
+            
+            // last_modified は常に更新
+            updateExpression += 'last_modified = :lm';
+            expressionAttributeValues[':lm'] = new Date().toISOString();
+    
+            // global_settings が存在する場合
+            if (settings.global_settings) {
+                updateExpression += ', global_settings = :gs';
+                expressionAttributeValues[':gs'] = settings.global_settings;
+            }
+    
+            // subscription_settings が存在する場合
+            if (settings.subscription_settings) {
+                updateExpression += ', subscription_settings = :ss';
+                expressionAttributeValues[':ss'] = settings.subscription_settings;
+            }
+    
+            // subscription_status が存在する場合のみ更新
+            if (settings.subscription_status) {
+                updateExpression += ', subscription_status = :st';
+                expressionAttributeValues[':st'] = settings.subscription_status;
+            }
+    
+            // version が存在する場合（デフォルト値: 1）
+            updateExpression += ', version = :v';
+            expressionAttributeValues[':v'] = settings.version || 1;
+    
             const command = new UpdateCommand({
                 TableName: 'server_settings',
                 Key: {
                     server_id: serverId
                 },
-                UpdateExpression: 'SET global_settings = :gs, version = :v, last_modified = :lm',
-                ExpressionAttributeValues: {
-                    ':gs': settings.global_settings,
-                    ':v': settings.version || 1,
-                    ':lm': new Date().toISOString()
-                },
+                UpdateExpression: updateExpression,
+                ExpressionAttributeValues: expressionAttributeValues,
                 ReturnValues: 'ALL_NEW'
             });
-
+    
             const response = await this.docClient.send(command);
             return response.Attributes;
         } catch (error) {
@@ -254,40 +302,43 @@ export class AWSWrapper {
         }
     }
 
-    // ユーザーポイントの更新
-    async updateUserPoints(serverId, userId, newPoints) {
+    /**
+     * ユーザーのポイントをアップデートする
+     * @param {string} serverId - サーバーID
+     * @param {string} userId - ユーザーID
+     * @param {Object} newPoints - 新しいポイントデータ
+     * @param {string} unitId - ユニットID
+     * @returns {Promise<Object>} 更新されたユーザーデータ
+     */
+    async updateUserPoints(serverId, userId, newPoints, unitId) {
         try {
+            const pk = `USER#${userId}#SERVER#${serverId}#UNIT#${unitId}`;
             const getCommand = new GetCommand({
                 TableName: 'discord_users',
                 Key: {
-                    pk: `USER#${userId}#SERVER#${serverId}`
+                    pk: pk
                 }
             });
+
             const existingData = await this.docClient.send(getCommand);
-            console.log('Existing data:', existingData);
 
             if (!existingData.Item) {
-                // データが存在しない場合、新規作成
-                console.log('No existing data. Creating new entry.');
                 const putCommand = new PutCommand({
                     TableName: 'discord_users',
                     Item: {
-                        pk: `USER#${userId}#SERVER#${serverId}`,
+                        pk: pk,
                         points: newPoints,
                         updated_at: new Date().toISOString(),
                     }
                 });
                 const putResponse = await this.docClient.send(putCommand);
-                console.log('PutCommand response:', putResponse);
                 return putResponse;
             }
 
-            // データが存在する場合、更新
-            console.log('Updating existing data.');
             const updateCommand = new UpdateCommand({
                 TableName: 'discord_users',
                 Key: {
-                    pk: `USER#${userId}#SERVER#${serverId}`
+                    pk: pk
                 },
                 UpdateExpression: 'SET points = :p, updated_at = :u',
                 ExpressionAttributeValues: {
@@ -296,10 +347,9 @@ export class AWSWrapper {
                 },
                 ReturnValues: 'ALL_NEW'
             });
-            const response = await this.docClient.send(updateCommand);
-            console.log('UpdateCommand response:', response);
-            return response.Attributes;
 
+            const response = await this.docClient.send(updateCommand);
+            return response.Attributes;
         } catch (error) {
             console.error("Error updating user points:", error);
             throw new Error("Failed to update user points");
@@ -601,7 +651,6 @@ export class AWSWrapper {
     // ポイント消費設定の更新
     async updatePointConsumptionSettings(serverId, settings) {
         try {
-            const now = new Date().toISOString();
             const command = new UpdateCommand({
                 TableName: 'server_settings',
                 Key: {
@@ -620,6 +669,126 @@ export class AWSWrapper {
         } catch (error) {
             console.error('Error updating point consumption settings:', error);
             throw error;
+        }
+    }
+
+    async getPointConsumptionHistory(serverId, options = {}) {
+        try {
+            const { userId, status, limit = 100 } = options;
+            let params = {
+                TableName: 'point_consumption_history',
+            };
+
+            if (userId) {
+                // UserIndexを使用してユーザーごとの履歴を取得
+                params = {
+                    ...params,
+                    IndexName: 'UserIndex',
+                    KeyConditionExpression: 'user_id = :uid',
+                    ExpressionAttributeValues: {
+                        ':uid': userId
+                    }
+                };
+            } else if (status) {
+                // StatusIndexを使用してステータスごとの履歴を取得
+                params = {
+                    ...params,
+                    IndexName: 'StatusIndex',
+                    KeyConditionExpression: '#status = :status',
+                    ExpressionAttributeNames: {
+                        '#status': 'status'
+                    },
+                    ExpressionAttributeValues: {
+                        ':status': status
+                    }
+                };
+            } else {
+                // サーバーIDでの基本的な履歴取得
+                params = {
+                    ...params,
+                    KeyConditionExpression: 'server_id = :sid',
+                    ExpressionAttributeValues: {
+                        ':sid': serverId
+                    }
+                };
+            }
+
+            const command = new QueryCommand({
+                ...params,
+                Limit: limit,
+                ScanIndexForward: false // 新しい順に取得
+            });
+
+            const response = await this.docClient.send(command);
+            return response.Items || [];
+        } catch (error) {
+            console.error('Error getting point consumption history:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * ポイント消費申請のステータスを更新する
+     * @param {string} serverId - サーバーID
+     * @param {string} timestamp - 更新対象の申請のタイムスタンプ
+     * @param {('approved'|'rejected'|'pending')} status - 新しいステータス
+     * @param {string} adminId - 承認/却下を行った管理者のID
+     * @returns {Promise<boolean>} - 更新が成功したかどうか
+     * @throws {Error} - DynamoDB操作に失敗した場合
+     */
+    async updatePointConsumptionStatus(serverId, timestamp, status, adminId) {
+        try {
+            const params = {
+                TableName: 'point_consumption_history', // テーブル名を統一
+                Key: {
+                    'server_id': serverId,
+                    'timestamp': timestamp
+                },
+                UpdateExpression: 'SET #status = :status, admin_id = :adminId, updated_at = :updatedAt',
+                ExpressionAttributeNames: {
+                    '#status': 'status'
+                },
+                ExpressionAttributeValues: {
+                    ':status': status,
+                    ':adminId': adminId,
+                    ':updatedAt': new Date().toISOString()
+                },
+                ReturnValues: 'ALL_NEW'
+            };
+    
+            // 新しいSDKのスタイルに合わせる
+            const command = new UpdateCommand(params);
+            const result = await this.docClient.send(command);
+            return result.Attributes;
+            
+        } catch (error) {
+            console.error('Error updating consumption status:', error);
+            return null;
+        }
+    }
+
+    /**
+     * ポイント消費履歴のレコードを削除する
+     * @param {string} serverId - サーバーID
+     * @param {string} timestamp - 削除対象のタイムスタンプ
+     * @returns {Promise<boolean>} - 削除が成功したかどうか
+     */
+    async deletePointConsumptionRecord(serverId, timestamp) {
+        try {
+            const params = {
+                TableName: 'point_consumption_history',
+                Key: {
+                    'server_id': serverId,
+                    'timestamp': timestamp
+                }
+            };
+
+            const command = new DeleteCommand(params);
+            await this.docClient.send(command);
+            return true;
+        } catch (error) {
+            console.error('Error deleting point consumption record:', error);
+            return false;
         }
     }
 

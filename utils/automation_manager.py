@@ -47,13 +47,17 @@ class AutomationManager:
             print(traceback.format_exc())
             return False
         
-    async def process_points_update(self, user_id: str, server_id: str, points: int):
+    async def process_points_update(self, user_id: str, server_id: str, points: int, unit_id: str = "1"):
         """
         ポイント更新時の処理
-        - 全てのポイント更新をここで捕捉
-        - ルールに基づいてアクションを実行
+        - unit_idに基づいて適切なポイント処理を行う
         """
         try:
+            # サーバー設定を取得
+            settings = await self.bot.get_server_settings(server_id)
+            if not settings:
+                return
+
             # ポイント関連のルールを処理
             rules = await self.get_server_rules(server_id)
             for rule in rules:
@@ -69,29 +73,26 @@ class AutomationManager:
                 if not point_conditions:
                     continue
 
-                # 全ての条件をチェック
-                conditions_met = await self._check_conditions(rule.conditions, {
+                # unit_idを含むコンテキストデータを作成
+                context_data = {
                     'user_id': user_id,
                     'server_id': server_id,
                     'points': points,
+                    'unit_id': unit_id,
                     'type': 'points_update'
-                })
+                }
+
+                # 条件チェックにunit_idを含める
+                conditions_met = await self._check_conditions(
+                    rule.conditions, 
+                    context_data
+                )
 
                 if conditions_met:
-                    await self._execute_actions(rule.actions, {
-                        'user_id': user_id,
-                        'server_id': server_id,
-                        'points': points
-                    })
-                    
-                    decimal_points = Decimal(str(points))
-
-                    # 実行履歴を記録
-                    # await self._log_execution(rule, {
-                    #     'user_id': user_id,
-                    #     'points': decimal_points,  # Decimalとして保存
-                    #     'trigger_type': 'points_update'
-                    # })
+                    await self._execute_actions(
+                        rule.actions,
+                        context_data
+                    )
 
         except Exception as e:
             print(f"Error processing points update: {e}")
@@ -127,10 +128,15 @@ class AutomationManager:
         return True
 
     async def _check_single_condition(self, condition: Condition, data: Dict[str, Any]) -> bool:
-        """単一の条件をチェック"""
+        """単一の条件をチェック - ポイント単位対応"""
         if condition.type == ConditionType.POINTS_THRESHOLD:
             points = data.get('points', 0)
+            unit_id = data.get('unit_id', "1")
             
+            # 条件のunit_idとデータのunit_idが一致する場合のみ処理
+            if hasattr(condition, 'unit_id') and condition.unit_id != unit_id:
+                return False
+
             print(f"Checking points threshold: current points = {points}, condition value = {condition.value}")
 
             if condition.operator == OperatorType.EQUALS:

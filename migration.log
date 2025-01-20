@@ -1,0 +1,48 @@
+2025-01-19 03:56:18,098 - INFO - バックアップを作成しました: backup_20250119_035617.json
+2025-01-19 03:56:18,122 - ERROR - レコード取得中にエラーが発生しました: An error occurred (ValidationException) when calling the Query operation: Query key condition not supported
+2025-01-19 03:56:18,124 - ERROR - Traceback (most recent call last):
+  File "C:\discord-gacha-bot\point_migration.py", line 68, in get_target_records
+    response = self.users_table.query(
+  File "C:\discord-gacha-bot\venv\lib\site-packages\boto3\resources\factory.py", line 581, in do_action
+    response = action(self, *args, **kwargs)
+  File "C:\discord-gacha-bot\venv\lib\site-packages\boto3\resources\action.py", line 88, in __call__
+    response = getattr(parent.meta.client, operation_name)(*args, **params)
+  File "C:\discord-gacha-bot\venv\lib\site-packages\botocore\client.py", line 569, in _api_call
+    return self._make_api_call(operation_name, kwargs)
+  File "C:\discord-gacha-bot\venv\lib\site-packages\botocore\client.py", line 1023, in _make_api_call
+    raise error_class(parsed_response, operation_name)
+botocore.exceptions.ClientError: An error occurred (ValidationException) when calling the Query operation: Query key condition not supported
+
+2025-01-19 03:56:18,125 - ERROR - 対象レコードが見つかりませんでした
+2025-01-19 03:56:54,238 - INFO - バックアップを作成しました: backup_20250119_035654.json
+2025-01-19 03:56:54,261 - INFO - 対象レコード数: 6
+2025-01-19 03:56:54,261 - INFO - 取得したレコード: [{'updated_at': '2025-01-18T01:36:40.386288+09:00', 'unit_id': '1', 'server_id': '1014465423045054525', 'user_id': '976427276340166696', 'pk': 'USER#976427276340166696#SERVER#1014465423045054525#UNIT#1', 'points': Decimal('95')}, {'updated_at': '2025-01-19T02:55:27.075233+09:00', 'unit_id': '2', 'server_id': '1236319711113777233', 'user_id': '976427276340166696', 'pk': 'USER#976427276340166696#SERVER#1236319711113777233#UNIT#2', 'points': Decimal('50')}, {'updated_at': '2025-01-17T09:28:46.901234+09:00', 'server_id': '1014465423045054525', 'user_id': '976427276340166696', 'pk': 'USER#976427276340166696#SERVER#1014465423045054525', 'points': Decimal('317'), 'last_gacha_date': '2024-12-26'}, {'updated_at': '2025-01-19T03:37:15.229622+09:00', 'unit_id': '2', 'server_id': '1236319711113777233', 'user_id': '976427276340166696', 'pk': 'USER#1236319711113777233#SERVER#2#UNIT#1', 'points': Decimal('30')}, {'updated_at': '2025-01-19T03:51:24.869420', 'user_id': '976427276340166696', 'server_id': '1236319711113777233', 'points': Decimal('150'), 'unit_id': '1', 'pk': 'USER#976427276340166696#SERVER#1236319711113777233#UNIT#1', 'last_gacha_date': 'unknown'}, {'updated_at': '2025-01-17T15:09:18.148355+09:00', 'unit_id': 'gacha', 'server_id': '1014465423045054525', 'user_id': '976427276340166696', 'pk': 'USER#976427276340166696#SERVER#1014465423045054525#UNIT#gacha', 'points': Decimal('30')}]
+2025-01-19 03:56:54,283 - ERROR - ポイント統合中にエラーが発生しました: An error occurred (ValidationException) when calling the PutItem operation: One or more parameter values were invalid: Missing the key pk in the item
+2025-01-19 03:56:54,285 - ERROR - Traceback (most recent call last):
+  File "C:\discord-gacha-bot\point_migration.py", line 121, in migrate_points
+    self.users_table.put_item(
+  File "C:\discord-gacha-bot\venv\lib\site-packages\boto3\resources\factory.py", line 581, in do_action
+    response = action(self, *args, **kwargs)
+  File "C:\discord-gacha-bot\venv\lib\site-packages\boto3\resources\action.py", line 88, in __call__
+    response = getattr(parent.meta.client, operation_name)(*args, **params)
+  File "C:\discord-gacha-bot\venv\lib\site-packages\botocore\client.py", line 569, in _api_call
+    return self._make_api_call(operation_name, kwargs)
+  File "C:\discord-gacha-bot\venv\lib\site-packages\botocore\client.py", line 1023, in _make_api_call
+    raise error_class(parsed_response, operation_name)
+botocore.exceptions.ClientError: An error occurred (ValidationException) when calling the PutItem operation: One or more parameter values were invalid: Missing the key pk in the item
+
+2025-01-19 03:59:55,505 - INFO - バックアップを作成しました: backup_20250119_035955.json
+2025-01-19 03:59:55,530 - INFO - 対象レコード数: 6
+2025-01-19 03:59:55,530 - INFO - 取得したレコード: [{'updated_at': '2025-01-18T01:36:40.386288+09:00', 'unit_id': '1', 'server_id': '1014465423045054525', 'user_id': '976427276340166696', 'pk': 'USER#976427276340166696#SERVER#1014465423045054525#UNIT#1', 'points': Decimal('95')}, {'updated_at': '2025-01-19T02:55:27.075233+09:00', 'unit_id': '2', 'server_id': '1236319711113777233', 'user_id': '976427276340166696', 'pk': 'USER#976427276340166696#SERVER#1236319711113777233#UNIT#2', 'points': Decimal('50')}, {'updated_at': '2025-01-17T09:28:46.901234+09:00', 'server_id': '1014465423045054525', 'user_id': '976427276340166696', 'pk': 'USER#976427276340166696#SERVER#1014465423045054525', 'points': Decimal('317'), 'last_gacha_date': '2024-12-26'}, {'updated_at': '2025-01-19T03:37:15.229622+09:00', 'unit_id': '2', 'server_id': '1236319711113777233', 'user_id': '976427276340166696', 'pk': 'USER#1236319711113777233#SERVER#2#UNIT#1', 'points': Decimal('30')}, {'updated_at': '2025-01-19T03:51:24.869420', 'user_id': '976427276340166696', 'server_id': '1236319711113777233', 'points': Decimal('150'), 'unit_id': '1', 'pk': 'USER#976427276340166696#SERVER#1236319711113777233#UNIT#1', 'last_gacha_date': 'unknown'}, {'updated_at': '2025-01-17T15:09:18.148355+09:00', 'unit_id': 'gacha', 'server_id': '1014465423045054525', 'user_id': '976427276340166696', 'pk': 'USER#976427276340166696#SERVER#1014465423045054525#UNIT#gacha', 'points': Decimal('30')}]
+2025-01-19 03:59:55,530 - INFO - 新しいレコードを作成します: {'user_id': '976427276340166696', 'server_id': '1014465423045054525', 'unit_id': '1', 'points': Decimal('125'), 'updated_at': '2025-01-17T15:09:18.148355+09:00', 'pk': 'USER#976427276340166696#SERVER#1014465423045054525#UNIT#1'}
+2025-01-19 03:59:55,548 - INFO - サーバー 1014465423045054525 のポイントを統合しました: 30 ポイント
+2025-01-19 03:59:55,566 - INFO - 古いレコードを削除しました: {'updated_at': '2025-01-17T15:09:18.148355+09:00', 'unit_id': 'gacha', 'server_id': '1014465423045054525', 'user_id': '976427276340166696', 'pk': 'USER#976427276340166696#SERVER#1014465423045054525#UNIT#gacha', 'points': Decimal('30')}
+2025-01-19 03:59:55,568 - INFO - ポイント統合が完了しました
+2025-01-19 04:05:17,785 - INFO - バックアップを作成しました: backup_20250119_040517.json
+2025-01-19 04:05:17,786 - ERROR - レコード取得中にエラーが発生しました: 'PointMigration' object has no attribute 'target_user_id'
+2025-01-19 04:05:17,786 - ERROR - Traceback (most recent call last):
+  File "C:\discord-gacha-bot\point_migration.py", line 70, in get_target_records
+    ':uid': self.target_user_id,
+AttributeError: 'PointMigration' object has no attribute 'target_user_id'
+
+2025-01-19 04:05:17,787 - ERROR - 対象レコードが見つかりませんでした

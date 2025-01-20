@@ -11,6 +11,8 @@ import { ServerSettingsForm } from '../EditForms/ServerSettingsForm';
 import { Settings, Bell, Coins as CoinsIcon, Globe, Languages, Swords, Gift, Stars, Award, CreditCard } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { PointConsumptionSettingsForm } from '../EditForms/PointConsumptionSettingsForm';
+import { GachaSettingsDisplay } from '../Displays/GachaSettingsDisplay';
+import PointConsumptionDisplay from '../Displays/PointConsumptionDisplay';
 
 const FeatureSettings = ({
     serverData,
@@ -292,6 +294,8 @@ const FeatureSettings = ({
                             <GachaSettingsForm
                                 settings={gacha}
                                 pointUnit={serverData.settings.global_settings.point_unit}
+                                serverData={serverData} // これを追加
+                                serverId={selectedServerId}  // これを追加
                                 onChange={(data) => {
                                     setFeatureData({
                                         ...featureData,
@@ -305,115 +309,10 @@ const FeatureSettings = ({
                             />
                         }
                     >
-                        <div className="bg-white rounded-xl p-6 shadow-sm">
-                            <div className="flex justify-between items-center mb-6">
-                                <div>
-                                    <h3 className="text-lg font-medium">ガチャ機能</h3>
-                                    <p className="text-sm text-gray-500">ガチャ機能の設定を管理します</p>
-                                </div>
-                                <span className={`px-3 py-1 rounded-full text-sm font-medium ${gacha.enabled ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>
-                                    {gacha.enabled ? "有効" : "無効"}
-                                </span>
-                            </div>
-
-                            <div className="divide-y divide-gray-200">
-                                {/* アイテム設定 */}
-                                <div className="pb-6">
-                                    <h4 className="text-base font-medium text-gray-900 mb-4">アイテム設定</h4>
-                                    <div className="space-y-3">
-                                        {gacha.items.map((item, index) => {
-                                            const totalWeight = calculateTotalWeight(gacha.items);
-                                            const probability = (parseInt(item.weight) / totalWeight * 100).toFixed(1);
-
-                                            return (
-                                                <div key={index} className="p-3 bg-gray-50 rounded-lg">
-                                                    <div className="flex items-center justify-between mb-2">
-                                                        <div>
-                                                            <p className="font-medium">{item.name}</p>
-                                                            <p className="text-sm text-gray-500">確率: {probability}%</p>
-                                                        </div>
-                                                        <p className="font-medium">{item.points.toLocaleString()} {serverData.settings.global_settings.point_unit}</p>
-                                                    </div>
-                                                    {/* メッセージ設定の表示 */}
-                                                    {item.message_settings?.enabled && (
-                                                        <div className="mt-2 pt-2 border-t border-gray-200">
-                                                            <p className="text-sm text-gray-600">
-                                                                <span className="text-gray-500">当選メッセージ: </span>
-                                                                {item.message_settings.message || '設定なし'}
-                                                            </p>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-
-                                {/* メッセージ設定 */}
-                                <div className="py-6">
-                                    {/* <h4 className="text-base font-medium text-gray-900 mb-4">共通メッセージ設定</h4> */}
-                                    <div className="space-y-4">
-                                        {/* <div className="bg-gray-50 p-4 rounded-lg">
-                                            <h5 className="text-sm font-medium text-gray-700 mb-2">セットアップメッセージ</h5>
-                                            <p className="text-gray-600">{gacha.messages?.setup || '設定なし'}</p>
-                                        </div> */}
-                                        <div className="bg-gray-50 p-4 rounded-lg">
-                                            <h5 className="text-sm font-medium text-gray-700 mb-2">デイリーメッセージ</h5>
-                                            <p className="text-gray-600">{gacha.messages?.daily || '設定なし'}</p>
-                                        </div>
-                                        {/* X投稿メッセージの表示を追加 */}
-                                        <div className="bg-gray-50 p-4 rounded-lg">
-                                            <h5 className="text-sm font-medium text-gray-700 mb-2">X投稿メッセージ</h5>
-                                            <p className="text-gray-600">
-                                                {gacha.messages?.tweet_message ? (
-                                                    <span>
-                                                        <span className="text-gray-400">デフォルト + </span>
-                                                        {gacha.messages.tweet_message}
-                                                    </span>
-                                                ) : (
-                                                    <span className="text-gray-400">デフォルトのみ（ガチャ結果！ [アイテム名]を獲得！ +[ポイント数]ポイント獲得！）</span>
-                                                )}
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* メディア設定 */}
-                                <div className="pt-6">
-                                    <h4 className="text-base font-medium text-gray-900 mb-4">メディア設定</h4>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div className="bg-gray-50 p-4 rounded-lg">
-                                            <h5 className="text-sm font-medium text-gray-700 mb-2">セットアップ画像</h5>
-                                            {gacha.media?.setup_image ? (
-                                                <div className="mt-2">
-                                                    <img
-                                                        src={gacha.media.setup_image}
-                                                        alt="Setup"
-                                                        className="w-full h-auto rounded border border-gray-200"
-                                                    />
-                                                </div>
-                                            ) : (
-                                                <p className="text-gray-500 text-sm">設定なし</p>
-                                            )}
-                                        </div>
-                                        <div className="bg-gray-50 p-4 rounded-lg">
-                                            <h5 className="text-sm font-medium text-gray-700 mb-2">バナーGIF</h5>
-                                            {gacha.media?.banner_gif ? (
-                                                <div className="mt-2">
-                                                    <img
-                                                        src={gacha.media.banner_gif}
-                                                        alt="Banner"
-                                                        className="w-full h-auto rounded border border-gray-200"
-                                                    />
-                                                </div>
-                                            ) : (
-                                                <p className="text-gray-500 text-sm">設定なし</p>
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                        <GachaSettingsDisplay
+                            settings={serverData.settings}  // 完全なsettingsオブジェクトを渡す
+                            channels={channels}
+                        />
                     </EditableFeatureCard>
                 );
             case 'fortune':
@@ -645,32 +544,12 @@ const FeatureSettings = ({
                             />
                         }
                     >
-                        <div className="bg-white rounded-xl p-6 shadow-sm">
-                            <div className="flex justify-between items-center mb-6">
-                                <div>
-                                    <h3 className="text-lg font-medium">ポイント消費機能</h3>
-                                    <p className="text-sm text-gray-500">ポイント消費機能の設定を管理します</p>
-                                </div>
-                                <span className={`px-3 py-1 rounded-full text-sm font-medium ${point_consumption.enabled ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>
-                                    {point_consumption.enabled ? "有効" : "無効"}
-                                </span>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-6">
-                                <div>
-                                    <p className="text-sm text-gray-500">必要ポイント</p>
-                                    <p className="font-medium">
-                                        {point_consumption.required_points?.toLocaleString()} {server.point_unit}
-                                    </p>
-                                </div>
-                                <div>
-                                    <p className="text-sm text-gray-500">通知チャンネル</p>
-                                    <p className="font-medium">
-                                        {channels?.find(c => c.id === point_consumption.notification_channel_id)?.name || '未設定'}
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
+                        <PointConsumptionDisplay
+                            settings={point_consumption}
+                            channels={serverData?.channels || []} // channelsを正しく渡す
+                            roles={serverRoles || []} // rolesのデフォルト値を設定
+                            pointUnit={serverData.settings.global_settings.point_unit}
+                        />
                     </EditableFeatureCard>
                 );
 

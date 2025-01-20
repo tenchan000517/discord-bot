@@ -534,7 +534,7 @@ class Admin(commands.Cog):
 
             await point_consumption_cog.setup_consumption_panel(
                 str(channel.id),
-                settings.point_consumption_settings
+                settings  
             )
 
             await interaction.response.send_message(

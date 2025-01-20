@@ -14,7 +14,7 @@ export async function GET(request, { params }) {
 
     try {
         const aws = new AWSWrapper();
-        const history = await aws.getConsumptionHistory(id);
+        const history = await aws.getPointConsumptionHistory(id);
 
         return NextResponse.json({
             success: true,

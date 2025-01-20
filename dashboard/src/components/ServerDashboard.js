@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { useSession, signIn } from 'next-auth/react';
+import { useSession, signIn, signOut } from 'next-auth/react';
 import { Alert } from '@/components/ui/Alert';
 import {
   BarChart3,
@@ -26,6 +26,10 @@ import FeatureSettings from './ServerDashboard/FeatureSettings';
 // import ServerSettings from './ServerDashboard/ServerSettings';
 import MobileMenu from './MobileMenu';
 import RankingListWithPagination from './ServerDashboard/RankingListWithPagination';
+import ConsumptionHistory from './ConsumptionHistory';
+import { createPointsUpdateData } from '@/utils/gachaHelper';
+import FreeConsumptionHistory from './ServerDashboard/FreeConsumptionHistory';
+import SubscriptionEditorForm from '@/components/EditForms/SubscriptionEditorForm';
 
 // ポイントデータを正規化するヘルパー関数
 const normalizePoints = (points) => {
@@ -44,7 +48,8 @@ const menuItems = [
     category: 'アナリティクス',
     items: [
       { id: 'dashboard', label: 'ダッシュボード', icon: BarChart3 },
-      { id: 'user-analysis', label: 'ユーザー分析', icon: Users }
+      { id: 'user-analysis', label: 'ユーザー分析', icon: Users },
+      { id: 'consumption-history', label: 'ポイント消費履歴', icon: History } // 追加
     ]
   },
   {
@@ -83,6 +88,11 @@ const ServerDashboard = () => {
   const [serverRoles, setServerRoles] = useState([]);
   const [selectedMenu, setSelectedMenu] = useState('dashboard');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [consumptionSummary, setConsumptionSummary] = useState({
+    totalRequests: 0,
+    pendingRequests: 0,
+    totalPoints: 0
+  });
 
   const selectedServer = useMemo(
     () => servers.find(server => server.id === selectedServerId),
@@ -100,6 +110,28 @@ const ServerDashboard = () => {
       setServerSettings(serverData.settings.global_settings);
     }
   }, [serverData]);
+
+  useEffect(() => {
+    if (!selectedServerId) return;
+
+    const fetchConsumptionSummary = async () => {
+      try {
+        const response = await fetch(`/api/servers/${selectedServerId}/consumption-summary`);
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to fetch consumption summary');
+        }
+
+        setConsumptionSummary(data.data);
+      } catch (err) {
+        console.error('Error fetching consumption summary:', err);
+        setError('消費サマリーデータの取得に失敗しました');
+      }
+    };
+
+    fetchConsumptionSummary();
+  }, [selectedServerId]);
 
   const handleServerChange = (e) => {
     const serverId = e.target.value;
@@ -137,6 +169,7 @@ const ServerDashboard = () => {
       const channelsData = await channelsResponse.json();
 
       serverData.channels = channelsData.channels;
+      console.log('Fetched Rankings Data:', serverData.rankings);
 
       setServerData(serverData);
       setAutomationRules(automationData.rules);
@@ -203,8 +236,18 @@ const ServerDashboard = () => {
     }
   }, [selectedServerId, fetchServerData]);
 
-  const handleUpdatePoints = async (userId, newPoints) => {
+  const handleUpdatePoints = async (userId, newPoints, unitId = "1") => {
     try {
+      const currentUser = serverData.rankings.find(user => user.user_id === userId);
+      console.log('Current user data:', currentUser); // デバッグログ追加
+
+      const updatedPoints = createPointsUpdateData(
+        currentUser.points,
+        unitId,
+        newPoints
+      );
+      console.log('Updated points data:', updatedPoints); // デバッグログ追加
+
       const response = await fetch(`/api/servers/${selectedServerId}/points`, {
         method: 'PUT',
         headers: {
@@ -212,21 +255,28 @@ const ServerDashboard = () => {
         },
         body: JSON.stringify({
           user_id: userId,
-          points: newPoints
+          points: updatedPoints,
+          unit_id: unitId
         }),
       });
 
+      // レスポンスの詳細を確認
+      const responseData = await response.clone().json();
+      console.log('API Response:', responseData); // デバッグログ追加
+
       if (!response.ok) {
-        throw new Error('ポイントの更新に失敗しました');
+        throw new Error(responseData.error || 'ポイントの更新に失敗しました');
       }
 
-      console.log('ポイントの更新成功:', { userId, newPoints });
+      console.log('ポイントの更新成功:', { userId, newPoints, unitId, updatedPoints });
 
       // ローカルのランキングデータを即時更新
       setServerData((prev) => ({
         ...prev,
         rankings: prev.rankings.map((user) =>
-          user.user_id === userId ? { ...user, points: newPoints } : user
+          user.user_id === userId
+            ? { ...user, points: updatedPoints }
+            : user
         ),
       }));
     } catch (error) {
@@ -234,7 +284,6 @@ const ServerDashboard = () => {
       setError(error.message);
     }
   };
-
 
   const handleUpdateAutomationRule = async (ruleId, updateData) => {
     try {
@@ -319,6 +368,9 @@ const ServerDashboard = () => {
     }
   }, [session]);
 
+  const pointUnits = serverData?.settings?.feature_settings?.point_consumption?.point_units || [];
+  console.log('pointUnits dashnoard:', pointUnits);
+
   // ローディング状態のUI
   if (status === "loading") {
     return (
@@ -388,31 +440,31 @@ const ServerDashboard = () => {
         return (
           <div className="space-y-8">
             {/* アナリティクスダッシュボード */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="bg-white p-6 rounded-lg shadow-sm">
-                <h3 className="text-lg font-medium mb-4">ユーザー統計</h3>
-                <div className="text-3xl font-bold">{serverData.rankings.length}</div>
-                <p className="text-gray-500">総ユーザー数</p>
+            <div className="flex flex-wrap gap-3 md:grid md:grid-cols-3 md:gap-6">
+              <div className="flex-1 min-w-[100px] max-w-[120px] bg-white p-3 rounded-lg shadow-sm md:min-w-0 md:max-w-none md:p-6">
+                <h3 className="text-sm font-medium mb-1 md:text-lg md:mb-4">ユーザー統計</h3>
+                <div className="text-xl font-bold md:text-3xl">{serverData.rankings.length}</div>
+                <p className="text-xs text-gray-500 mt-1 md:text-base">総ユーザー数</p>
               </div>
-              <div className="bg-white p-6 rounded-lg shadow-sm">
-                <h3 className="text-lg font-medium mb-4">累計ポイント</h3>
-                <div className="text-3xl font-bold">
+              <div className="flex-1 min-w-[100px] max-w-[120px] bg-white p-3 rounded-lg shadow-sm md:min-w-0 md:max-w-none md:p-6">
+                <h3 className="text-sm font-medium mb-1 md:text-lg md:mb-4">累計ポイント</h3>
+                <div className="text-xl font-bold md:text-3xl">
                   {(serverData?.rankings || [])
                     .reduce((sum, user) => sum + normalizePoints(user.points), 0)
                     .toLocaleString()}
                 </div>
-                <p className="text-gray-500">
+                <p className="text-xs text-gray-500 mt-1 md:text-base">
                   {serverData?.settings?.global_settings?.point_unit || 'ポイント'}
                 </p>
               </div>
-              <div className="bg-white p-6 rounded-lg shadow-sm">
-                <h3 className="text-lg font-medium mb-4">アクティブ率</h3>
-                <div className="text-3xl font-bold">
+              <div className="flex-1 min-w-[100px] max-w-[120px] bg-white p-3 rounded-lg shadow-sm md:min-w-0 md:max-w-none md:p-6">
+                <h3 className="text-sm font-medium mb-1 md:text-lg md:mb-4">アクティブ率</h3>
+                <div className="text-xl font-bold md:text-3xl">
                   {((serverData.rankings.filter(user => user.last_active &&
                     new Date(user.last_active) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)).length
                     / serverData.rankings.length) * 100).toFixed(1)}%
                 </div>
-                <p className="text-gray-500">過去7日間</p>
+                <p className="text-xs text-gray-500 mt-1 md:text-base">過去7日間</p>
               </div>
             </div>
 
@@ -421,12 +473,19 @@ const ServerDashboard = () => {
               <div className="lg:col-span-2 space-y-8">
                 {/* サーバー情報 */}
                 <div className="bg-white rounded-lg shadow-sm">
+                  {console.log('Rendering ServerInfo with props:', {
+                    serverData,
+                    selectedServer,
+                    editingSection,
+                    featureData, // ログに含める
+                  })}
                   <ServerInfo
                     serverData={serverData}
                     selectedServer={selectedServer}
                     editingSection={editingSection}
                     setEditingSection={setEditingSection}
                     handleUpdateSettings={handleUpdateSettings}
+                    featureSettings={serverData?.settings?.feature_settings} // 直接渡すように修正
                   />
                 </div>
 
@@ -475,10 +534,80 @@ const ServerDashboard = () => {
                   <div className="p-4">
                     <RankingListWithPagination
                       rankings={serverData.rankings} // 全データを渡す
-                      pointUnit={serverData.settings.global_settings.point_unit}
+                      globalSettings={serverData.settings.global_settings}
                       onUpdatePoints={handleUpdatePoints}
                     />
                   </div>
+                </div>
+              </div>
+              {/* <SubscriptionEditorForm 
+                serverId={selectedServerId}
+                currentSettings={serverData?.settings}
+                onUpdate={() => fetchServerData(selectedServerId)}
+             /> */}
+            </div>
+          </div>
+        );
+
+      case 'consumption-history':
+
+        // 有料プランでない場合は制限付きコンポーネントを表示
+        if (serverData?.settings?.subscription_status === 'free') {
+          return (
+            <FreeConsumptionHistory
+              serverId={selectedServerId}
+              currentSettings={serverData?.settings}
+              onUpdate={() => fetchServerData(selectedServerId)}
+            />
+          );
+        }
+
+        console.log('Rendering full ConsumptionHistory - Server is on paid plan');
+
+        return (
+          <div className="space-y-8">
+            {/* アナリティクスダッシュボード - ポイント消費履歴 */}
+            <div className="flex flex-wrap gap-3 md:grid md:grid-cols-3 md:gap-6">
+              <div className="flex-1 min-w-[100px] max-w-[120px] bg-white p-3 rounded-lg shadow-sm md:min-w-0 md:max-w-none md:p-6">
+                <h3 className="text-sm font-medium mb-1 md:text-lg md:mb-4 mt-3 md:mt-0">
+                  総申請数
+                </h3>
+                <div className="text-xl font-bold md:text-3xl">{consumptionSummary.totalRequests}</div>
+                <p className="text-xs text-gray-500 mt-1 md:text-gray-500 md:text-base">
+                  全期間
+                </p>
+              </div>
+              <div className="flex-1 min-w-[100px] max-w-[120px] bg-white p-3 rounded-lg shadow-sm md:min-w-0 md:max-w-none md:p-6">
+                <h3 className="text-sm font-medium mb-1 md:text-lg md:mb-4 mt-3 md:mt-0">
+                  承認待ち
+                </h3>
+                <div className="text-xl font-bold md:text-3xl">{consumptionSummary.pendingRequests}</div>
+                <p className="text-xs text-gray-500 mt-1 md:text-gray-500 md:text-base">
+                  現在の申請
+                </p>
+              </div>
+              <div className="flex-1 min-w-[100px] max-w-[120px] bg-white p-3 rounded-lg shadow-sm md:min-w-0 md:max-w-none md:p-6">
+                <h3 className="text-sm font-medium mb-1 md:text-lg md:mb-4">
+                  ＜承認済＞
+                  <br className="md:hidden" />
+                  消費ポイント
+                </h3>
+                <div className="text-xl font-bold md:text-3xl">{consumptionSummary.totalPoints}</div>
+                <p className="text-xs text-gray-500 mt-1 md:text-gray-500 md:text-base">
+                  {serverData?.settings?.global_settings?.point_unit || 'ポイント'}
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-8">
+              {/* メインコンテンツエリア */}
+              <div className="space-y-8">
+                {/* 消費履歴テーブル */}
+                <div className="bg-white rounded-lg shadow-sm">
+                  <ConsumptionHistory
+                    serverId={selectedServerId}
+                    globalSettings={serverData.settings.global_settings}
+                  />
                 </div>
               </div>
             </div>
@@ -542,8 +671,9 @@ const ServerDashboard = () => {
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-2 px-4 py-2 bg-[#5865F2] hover:bg-[#4752C4] text-white rounded-lg transition-colors"
                 >
-                  <img src="/icon_clyde_white_RGB.png" alt="" className="w-6 h-5" />
-                  ボットを招待
+                  <img src="/icon_clyde_white_RGB.png" alt="Discord Icon" className="w-5 sm:w-6 h-5" />
+                  <span className="block sm:hidden">招待</span>
+                  <span className="hidden sm:block">ボットを招待</span>
                 </a>
 
                 <button
@@ -551,6 +681,13 @@ const ServerDashboard = () => {
                   aria-label="通知"
                 >
                   <Bell className="w-5 h-5" />
+                </button>
+
+                <button
+                  onClick={() => signOut({ callbackUrl: '/' })}
+                  className="px-4 py-2 text-white bg-red-600 hover:bg-red-500 rounded-lg transition-all"
+                >
+                  ログアウト
                 </button>
 
                 {/* ハンバーガーメニューボタン */}

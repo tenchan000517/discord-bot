@@ -17,44 +17,108 @@ class PointManager:
         self.bot = bot
         self.db = bot.db
 
-    async def get_points(self, server_id: str, user_id: str) -> int:
-        """ユーザーのポイントを取得"""
-        return await self.db.get_user_points(user_id, server_id)
-
-    async def update_points(self, user_id: str, server_id: str, points: int, source: str = None):
+    async def get_points(self, server_id: str, user_id: str, unit_id: str = "1") -> int:
         """
-        ポイントを更新し、必要に応じて通知を送信
-        source: ポイント変更の理由（'gacha', 'battle', 'consumption'など）
+        指定されたユーザーの保有ポイントを取得する
+
+        Args:
+            server_id (str): サーバーのDiscord ID
+            user_id (str): ユーザーのDiscord ID
+            unit_id (str, optional): ポイントユニットのID. デフォルトは "1"
+
+        Returns:
+            int: ユーザーの保有ポイント。データが存在しない場合は0
+        """
+        try:
+            print(f"[DEBUG] Getting points for:")
+            print(f"  Server ID: {server_id}")
+            print(f"  User ID: {user_id}")
+            print(f"  Unit ID: {unit_id}")
+            
+            # ユーザーデータの取得
+            data = await self.db.get_user_data(user_id, server_id, unit_id)
+            print(f"[DEBUG] Retrieved user data: {data}")
+            
+            if not data:
+                print("[DEBUG] No data found for user")
+                return 0
+                
+            if 'points' not in data:
+                print("[DEBUG] No points field in data")
+                return 0
+            
+            # ポイントの取得と変換
+            points_data = data['points']
+            print(f"[DEBUG] Points data type: {type(points_data)}")
+            
+            try:
+                # pointsが辞書型の場合の処理
+                if isinstance(points_data, dict):
+                    points = int(points_data.get(unit_id, 0))
+                    print(f"[DEBUG] Retrieved points from dict: {points}")
+                    return points
+                
+                # 従来の単一値の場合
+                points = int(points_data)
+                print(f"[DEBUG] Retrieved points as single value: {points}")
+                return points
+                
+            except (ValueError, TypeError) as e:
+                print(f"[ERROR] Error converting points value: {e}")
+                return 0
+                
+        except Exception as e:
+            print(f"[ERROR] Error in get_points: {e}")
+            print(traceback.format_exc())
+            return 0
+
+    async def update_points(self, user_id: str, server_id: str, points: int, unit_id: str = "1", source: str = None) -> bool:
+        """
+        ポイントを増減させる（増加は正の値、減少は負の値）
+        Args:
+            points: 増減させるポイント量（正の値で増加、負の値で減少）
+        Returns:
+            bool: 操作が成功したかどうか
         """
         try:
             # 現在のポイントを取得
-            current_points = await self.get_points(server_id, user_id)
-            print(f"[DEBUG] update_points - 現在のポイント: {current_points}")
-
+            current_points = await self.get_points(server_id, user_id, unit_id)
+            
+            # 新しい合計を計算
+            new_total = current_points + points
+            
+            # マイナスにならないようにチェック
+            if new_total < 0:
+                return False
+                
             # ポイントを更新
-            success = await self.db.update_feature_points(user_id, server_id, points)
-            print(f"[DEBUG] update_points - 更新成功: {success}")
-            print(f"[DEBUG] update_points - 更新後のポイント: {points}")
-
+            success = await self.db.update_feature_points(user_id, server_id, points, unit_id)
+            
             if success:
-                # 変更量を計算
-                points_change = points - current_points
-                print(f"[DEBUG] update_points - ポイント変動量: {points_change}")
 
-                if points_change > 0:
-                    # ポイント獲得の通知
-                    await self._notify_point_gain(server_id, user_id, points_change, source)
-                elif points_change < 0:
-                    # ポイント消費の通知
-                    await self._notify_point_consumption(server_id, user_id, abs(points_change), source)
+                # サーバー設定を取得してポイント単位名を決定
+                settings = await self.bot.get_server_settings(server_id)
+                point_unit_name = settings.global_settings.point_unit
+                if settings.global_settings.multiple_points_enabled:
+                    point_unit = next(
+                        (unit for unit in settings.global_settings.point_units 
+                        if unit.unit_id == unit_id),
+                        None
+                    )
+                    if point_unit:
+                        point_unit_name = point_unit.name
+
+                # 通知処理
+                if points > 0:
+                    await self._notify_point_gain(server_id, user_id, points, source, unit_id, point_unit_name)
+                elif points < 0:
+                    await self._notify_point_consumption(server_id, user_id, abs(points), source, unit_id, point_unit_name)
 
                 # Automationマネージャーに通知
                 automation_cog = self.bot.get_cog('Automation')
                 if automation_cog:
                     await automation_cog.automation_manager.process_points_update(
-                        user_id,
-                        server_id,
-                        points  # 更新後の最新のポイント
+                        user_id, server_id, new_total, unit_id
                     )
 
             return success
@@ -63,8 +127,9 @@ class PointManager:
             print(f"Error updating points: {e}")
             print(traceback.format_exc())
             return False
-        
-    async def _notify_point_gain(self, server_id: str, user_id: str, points: int, source: str):
+
+    async def _notify_point_gain(self, server_id: str, user_id: str, points: int, 
+                               source: str, unit_id: str, unit_name: str):
         """ポイント獲得の通知"""
         try:
             settings = await self.bot.get_server_settings(server_id)
@@ -88,7 +153,7 @@ class PointManager:
 
             embed = discord.Embed(
                 title="ポイント獲得",
-                description=f"<@{user_id}>が{source_text}で{points}{settings.global_settings.point_unit}を獲得しました",
+                description=f"<@{user_id}>が{source_text}で{points}{unit_name}を獲得しました",
                 color=discord.Color.green()
             )
             
@@ -97,7 +162,8 @@ class PointManager:
         except Exception as e:
             print(f"Error in point gain notification: {e}")
 
-    async def _notify_point_consumption(self, server_id: str, user_id: str, points: int, source: str):
+    async def _notify_point_consumption(self, server_id: str, user_id: str, points: int, 
+                                      source: str, unit_id: str, unit_name: str):
         """ポイント消費の通知"""
         try:
             settings = await self.bot.get_server_settings(server_id)
@@ -114,7 +180,7 @@ class PointManager:
 
             embed = discord.Embed(
                 title="ポイント消費",
-                description=f"<@{user_id}>が{source}で{points}{settings.global_settings.point_unit}を消費しました",
+                description=f"<@{user_id}>が{source}で{points}{unit_name}を消費しました",
                 color=discord.Color.red()
             )
             
@@ -123,11 +189,24 @@ class PointManager:
         except Exception as e:
             print(f"Error in point consumption notification: {e}")
 
-    async def consume_points(self, server_id: str, user_id: str, points: int, reason: str = "ポイント消費") -> bool:
-        """ポイントを消費する"""
+    async def consume_points(self, server_id: str, user_id: str, points: int, reason: str = "ポイント消費", unit_id: str = "1", source: str = None) -> bool:
+        """
+        ポイントを消費する
+        
+        Args:
+            server_id (str): サーバーID
+            user_id (str): ユーザーID
+            points (int): 消費するポイント量
+            reason (str, optional): 消費理由. デフォルトは "ポイント消費"
+            unit_id (str, optional): ポイントユニットID. デフォルトは "1"
+            source (str, optional): ポイント変動元. デフォルトはNone
+
+        Returns:
+            bool: 操作が成功したかどうか
+        """
         try:
             # 現在のポイントを取得
-            current_points = await self.get_points(server_id, user_id)
+            current_points = await self.get_points(server_id, user_id, unit_id)
             
             # ポイント不足チェック
             if current_points < points:
@@ -135,7 +214,13 @@ class PointManager:
 
             # 新しいポイントを計算して更新
             new_points = current_points - points
-            success = await self.update_points(user_id, server_id, new_points, reason)
+            success = await self.update_points(
+                user_id=user_id, 
+                server_id=server_id, 
+                points=new_points,
+                unit_id=unit_id,
+                source=source
+            )
 
             return success
 

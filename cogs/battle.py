@@ -102,16 +102,35 @@ class BattleRoyale(commands.Cog):
         self.bot = bot
         self.active_games = {}
         print("Battle Royale cog initialized")
+        print("[Battle] Cog initialized, active_games cleared")
+
+    @commands.Cog.listener()
+    async def on_ready(self):
+        """ボット起動時に実行"""
+        self.active_games = {}  # ボット起動時にもクリア
+        print("[Battle] Bot ready, active_games cleared")
 
     async def get_battle_settings(self, guild_id: str):
         """バトル設定を取得"""
         try:
+            print(f"[DEBUG] Getting settings for guild ID: {guild_id}")
             settings = await self.bot.get_server_settings(guild_id)
-            if not settings or not settings.global_settings.features_enabled.get('battle', True):
+            print(f"[DEBUG] Retrieved settings: {settings}")
+            
+            if not settings:
+                print("[DEBUG] No settings found")
                 return None
+                
+            if not settings.global_settings.features_enabled.get('battle', True):
+                print("[DEBUG] Battle feature is disabled")
+                return None
+                
+            print(f"[DEBUG] Battle settings: {settings.battle_settings}")
             return settings.battle_settings
+            
         except Exception as e:
-            print(f"Error getting battle settings: {e}")
+            print(f"[ERROR] Error getting battle settings: {e}")
+            print(f"[ERROR] Full traceback: {traceback.format_exc()}")
             return None
 
     @app_commands.command(name="battle", description="バトルロイヤルを開始します")
@@ -126,20 +145,35 @@ class BattleRoyale(commands.Cog):
         test_mode: bool = False,
         dummy_count: int = 10
     ):
+        start_time = datetime.now()
+        print(f"[Battle] Command received at {start_time}")
+        print(f"[Battle] Interaction ID: {interaction.id}")
+        print(f"[Battle] Guild ID: {interaction.guild_id}")
+        
         try:
+            print("[Battle] Attempting to defer")
+            # await interaction.response.defer()
+            print("[Battle] Successfully deferred")
+            
             server_id = str(interaction.guild_id)
+            print(f"[DEBUG] Starting battle for server ID: {server_id}")
             
             if server_id in self.active_games:
-                await interaction.response.send_message(
+                print(f"[DEBUG] Battle already active in server {server_id}")
+                await interaction.followup.send(
                     "すでにバトルが進行中です。",
                     ephemeral=True
                 )
                 return
 
             # 設定を取得
+            print(f"[DEBUG] Attempting to get battle settings")
             settings = await self.get_battle_settings(server_id)
+            print(f"[DEBUG] Retrieved battle settings: {settings}")
+            
             if settings is None:
-                await interaction.response.send_message(
+                print(f"[DEBUG] No battle settings found for server {server_id}")
+                await interaction.followup.send(
                     "このサーバーではバトル機能が無効になっています。",
                     ephemeral=True
                 )
@@ -192,7 +226,7 @@ class BattleRoyale(commands.Cog):
             # 初期Embedを作成
             initial_embed = await view._create_battle_info_embed()
             
-            await interaction.response.send_message(embed=initial_embed, view=view)
+            await interaction.followup.send(embed=initial_embed, view=view)
             await self.start_countdown(interaction.channel, game)
 
         except Exception as e:
@@ -206,7 +240,7 @@ class BattleRoyale(commands.Cog):
     async def start_countdown(self, channel: discord.TextChannel, game: BattleGame):
         """カウントダウンを開始"""
         try:
-            total_seconds = game.settings.start_delay_minutes * 60
+            total_seconds = int(game.settings.start_delay_minutes * 60)
             warning_times = [60, 30, 15]  # 警告を出すタイミング（秒）
             
             for remaining in range(total_seconds, 0, -1):
@@ -262,10 +296,20 @@ class BattleRoyale(commands.Cog):
             while not game.is_finished:
                 events = []
                 for _ in range(min(len(game.alive_players) // 2, 5)):
-                    event = generate_battle_event(game)
+                    # 引数を正しく渡すように修正
+                    event = generate_battle_event(
+                        alive_players=game.alive_players,
+                        dead_players=game.dead_players
+                    )
                     if event:
                         events.append(event)
-                        await self.process_battle_event(game, event)
+                        # イベントの処理
+                        if event.killed_players:
+                            for player_id in event.killed_players:
+                                game.kill_player(player_id)
+                        if event.revived_players:
+                            for player_id in event.revived_players:
+                                game.revive_player(player_id)
 
                 round_embed = format_round_message(game.round_number, events, len(game.alive_players))
                 if game.settings.test_mode:
@@ -305,7 +349,7 @@ class BattleRoyale(commands.Cog):
         )
         debug_embed.add_field(
             name="生存者情報",
-            value=f"生存: {len(game.alive_players)}人\n死亡: {len(game.dead_players)}人"
+            value=f"生存: {len(game.alive_players)}人\n脱落: {len(game.dead_players)}人"
         )
         await channel.send(embed=debug_embed)
 
@@ -318,9 +362,14 @@ class BattleRoyale(commands.Cog):
             embed = await self._create_results_embed(game, results)
             await channel.send(embed=embed)
             
-            if not game.settings.test_mode and winner_id:
-                await self.handle_rewards(channel.guild, winner_id, game)
+            # ここでテストモードのチェックをしています
+            # if not game.settings.test_mode and winner_id:
+            #     await self.handle_rewards(channel.guild, winner_id, game)
             
+            # ダミープレイヤー以外であれば報酬を付与
+            if winner_id and not str(winner_id).startswith('dummy_'):
+                await self.handle_rewards(channel.guild, winner_id, game)
+
         except Exception as e:
             print(f"Error in end battle: {e}")
             print(traceback.format_exc())
@@ -376,10 +425,27 @@ class BattleRoyale(commands.Cog):
             # ポイントの付与
             if game.settings.points_enabled and hasattr(self.bot, 'point_manager'):
                 try:
-                    # 優勝者の現在のポイントを取得
+                    # unit_idの取得（デフォルト値対応）
+                    unit_id = getattr(game.settings, 'unit_id', "1")
+
+                    # サーバー設定からポイント単位名を取得
+                    server_settings = await self.bot.get_server_settings(game.server_id)
+                    point_unit_name = server_settings.global_settings.point_unit
+
+                    if server_settings.global_settings.multiple_points_enabled:
+                        unit = next(
+                            (u for u in server_settings.global_settings.point_units 
+                            if u.unit_id == unit_id),
+                            None
+                        )
+                        if unit:
+                            point_unit_name = unit.name
+
+                    # 優勝者のポイント付与
                     winner_current_points = await self.bot.point_manager.get_points(
                         game.server_id,
-                        winner_id
+                        winner_id,
+                        unit_id
                     )
                     
                     # 優勝ポイントを加算
@@ -388,19 +454,19 @@ class BattleRoyale(commands.Cog):
                         winner_id,
                         game.server_id,
                         winner_new_points,
+                        unit_id,
                         PointSource.BATTLE_WIN
                     )
-                    
-                    # キルポイントの付与
+                        
+                    # キルポイントの付与（ダミープレイヤー以外に対して）
                     for player_id, kills in game.kill_counts.items():
-                        if kills > 0:
-                            # 現在のポイントを取得
+                        if kills > 0 and not str(player_id).startswith('dummy_'):
                             current_points = await self.bot.point_manager.get_points(
                                 game.server_id,
-                                player_id
+                                player_id,
+                                unit_id
                             )
                             
-                            # キルポイントを加算
                             kill_points = kills * game.settings.points_per_kill
                             new_points = current_points + kill_points
                             
@@ -408,6 +474,7 @@ class BattleRoyale(commands.Cog):
                                 player_id,
                                 game.server_id,
                                 new_points,
+                                unit_id,
                                 PointSource.BATTLE_KILL
                             )
 
@@ -419,11 +486,59 @@ class BattleRoyale(commands.Cog):
             print(f"Error handling rewards: {e}")
             print(traceback.format_exc())
 
+    @app_commands.command(name="battle_stop", description="進行中のバトルを強制終了します")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def stop_battle(self, interaction: discord.Interaction):
+        try:
+            await interaction.response.defer()
+            
+            server_id = str(interaction.guild_id)
+            
+            if server_id not in self.active_games:
+                await interaction.followup.send(
+                    "現在進行中のバトルはありません。",
+                    ephemeral=True
+                )
+                return
+                
+            game = self.active_games[server_id]
+            
+            # 終了メッセージを送信
+            embed = discord.Embed(
+                title="⚠️ バトル強制終了",
+                description="管理者によりバトルが強制終了されました。",
+                color=discord.Color.red()
+            )
+            
+            # 生存者数を表示
+            if len(game.alive_players) > 0:
+                survivors = [f"<@{player_id}>" for player_id in game.alive_players if not str(player_id).startswith('dummy_')]
+                if survivors:
+                    embed.add_field(
+                        name="生存していたプレイヤー",
+                        value="\n".join(survivors) if survivors else "なし",
+                        inline=False
+                    )
+            
+            await interaction.followup.send(embed=embed)
+            
+            # アクティブゲームリストから削除
+            del self.active_games[server_id]
+            
+        except Exception as e:
+            print(f"Error stopping battle: {e}")
+            print(traceback.format_exc())
+            await interaction.followup.send(
+                "バトルの終了処理中にエラーが発生しました。",
+                ephemeral=True
+            )
+
 async def setup(bot):
     print("[Battle] Setting up Battle Royale Cog")
     try:
         await bot.add_cog(BattleRoyale(bot))
         print("[Battle] Successfully added Battle Royale Cog")
+        print("[Battle] Command tree synced status:", bot.tree._synced)  # コマンドツリーの同期状態を確認
     except Exception as e:
         print(f"[Battle] Failed to add cog: {e}")
         print(traceback.format_exc())

@@ -48,9 +48,15 @@ class GachaBot(commands.Bot):
             try:
                 self.reward_manager = RewardManager(self)
                 print("Reward manager initialized successfully")
+
+                # TokenOperationsの初期化を追加
+                from utils.token_operations import TokenOperations
+                self.token_operations = TokenOperations()
+                print("Token operations initialized successfully")
             except Exception as e:
                 print(f"Warning: Failed to initialize reward manager: {e}")
                 self.reward_manager = None
+                self.token_operations = None
 
         except Exception as e:
             print(f"Failed to initialize core database: {e}")
@@ -71,7 +77,7 @@ class GachaBot(commands.Bot):
                 extension_status.append("Admin: ❌")
 
             # 既存の拡張機能を読み込み
-            for ext in ['gacha', 'fortunes', 'battle', 'automation', 'rewards', 'points_consumption']:  # points_consumptionを追加
+            for ext in ['gacha', 'fortunes', 'battle', 'automation', 'rewards', 'points_consumption', 'token_transfer']:
                 try:
                     await self.load_extension(f'cogs.{ext}')
                     print(f"Loaded {ext} extension")
@@ -103,14 +109,13 @@ class GachaBot(commands.Bot):
         print(f"Database status: {'Available' if self.db_available else 'Unavailable'}")
 
         # 全サーバーの設定をデバッグ出力（必要ならループする）
-        for guild in self.guilds:
-            print(f"[DEBUG] Loading settings for guild {guild.name} (ID: {guild.id})")
-            settings = await self.get_server_settings(str(guild.id))
-            if settings:
-                print(f"[DEBUG] settings for {guild.id}: {settings}")
-            else:
-                print(f"[DEBUG] No settings found for guild {guild.id}")
-
+        # for guild in self.guilds:
+        #     print(f"[DEBUG] Loading settings for guild {guild.name} (ID: {guild.id})")
+        #     settings = await self.get_server_settings(str(guild.id))
+        #     if settings:
+        #         print(f"[DEBUG] settings for {guild.id}: {settings}")
+        #     else:
+        #         print(f"[DEBUG] No settings found for guild {guild.id}")
 
     async def get_server_settings(self, guild_id: str):
         """サーバー設定を取得するヘルパーメソッド"""
@@ -122,11 +127,11 @@ class GachaBot(commands.Bot):
 
         try:
             settings = await self.settings_manager.get_settings(str(guild_id))
-            print(f"[DEBUG] settings: {settings}")
+            # print(f"[DEBUG] settings: {settings}")
 
             # gacha_settings の抽出
             gacha_settings = settings.gacha_settings if settings else None
-            print(f"[DEBUG] gacha_settings: {gacha_settings}")
+            # print(f"[DEBUG] gacha_settings: {gacha_settings}")
 
             return settings
         except Exception as e:
@@ -134,43 +139,43 @@ class GachaBot(commands.Bot):
             print(traceback.format_exc())
             return None
 
-            
-    # main.py内のGachaBotクラスに追加
-
     async def on_guild_join(self, guild):
         """新しいサーバーに参加した時の処理"""
         try:
             # データベースが利用可能か確認
             if not self.db_available:
-                print(f"Warning: Database unavailable. Could not register server {guild.id}")
+                print(f"Warning: Database unavailable. Could not process server {guild.id}")
                 return
 
-            # サーバーIDを登録
-            await self.db.register_server(str(guild.id))
-            print(f"Successfully registered new server: {guild.name} (ID: {guild.id})")
+            # サーバーが既に存在するかチェック
+            exists = await self.db.register_server(str(guild.id))
+            print(f"[DEBUG] Server {guild.id} registration check: {'Already exists' if exists else 'New registration'}")
 
-            # 初期設定も同時に作成（必要に応じて）
-            await self.settings_manager.create_default_settings(str(guild.id))
-            print(f"Created default settings for server: {guild.name}")
-
-        except Exception as e:
-            print(f"Error registering new server {guild.id}: {e}")
-            print(traceback.format_exc())
-
-    async def on_guild_remove(self, guild):
-        """サーバーから削除された時の処理"""
-        try:
-            if not self.db_available:
-                print(f"Warning: Database unavailable. Could not remove server {guild.id}")
-                return
-
-            # サーバーIDを削除（オプション）
-            await self.db.remove_server(str(guild.id))
-            print(f"Successfully removed server: {guild.name} (ID: {guild.id})")
+            if not exists:
+                # 新規サーバーの場合、デフォルト設定を作成
+                await self.settings_manager.create_default_settings(str(guild.id))
+                print(f"Initialized new server: {guild.name} (ID: {guild.id}) with default settings")
+            else:
+                print(f"Reconnected to existing server: {guild.name} (ID: {guild.id})")
 
         except Exception as e:
-            print(f"Error removing server {guild.id}: {e}")
+            print(f"Error processing server join for {guild.name} (ID: {guild.id}): {e}")
             print(traceback.format_exc())
+
+    # async def on_guild_remove(self, guild):
+    #     """サーバーから削除された時の処理"""
+    #     try:
+    #         if not self.db_available:
+    #             print(f"Warning: Database unavailable. Could not remove server {guild.id}")
+    #             return
+
+    #         # サーバーIDを削除（オプション）
+    #         await self.db.remove_server(str(guild.id))
+    #         print(f"Successfully removed server: {guild.name} (ID: {guild.id})")
+
+    #     except Exception as e:
+    #         print(f"Error removing server {guild.id}: {e}")
+    #         print(traceback.format_exc())
 
 async def main():
     try:

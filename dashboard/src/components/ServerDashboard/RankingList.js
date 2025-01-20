@@ -1,39 +1,57 @@
-'use client';
-
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Edit2 } from 'lucide-react';
 import { UserPointsForm } from '../EditForms/UserPointsForm';
+import { getPointsByUnitId } from '@/utils/gachaHelper';
 
-// ポイント正規化関数
-const normalizePoints = (points) => {
-    if (typeof points === 'number' || typeof points === 'string') {
-        return Number(points);
-    }
-    if (points && typeof points === 'object') {
-        return Number(points.total || 0);
-    }
-    return 0;
-};
-
-const RankingList = ({ rankings, pointUnit, onUpdatePoints }) => {
+const RankingList = ({
+    rankings,
+    pointUnits,
+    selectedUnitId,
+    onUpdatePoints
+}) => {
     const [editingUserId, setEditingUserId] = useState(null);
 
-    const handleSave = async (userId, newPoints) => {
-        await onUpdatePoints(userId, newPoints);
-        setEditingUserId(null);
-    };
+    // 現在選択中のポイントユニットを取得
+    const currentPointUnit = useMemo(() =>
+        pointUnits.find(unit => unit.unit_id === selectedUnitId) || pointUnits[0],
+        [pointUnits, selectedUnitId]
+    );
 
     // rankingsをポイントでソート
-    const sortedRankings = [...rankings].sort((a, b) =>
-        normalizePoints(b.points) - normalizePoints(a.points)
-    );
+    const sortedRankings = useMemo(() => {
+        return [...rankings]
+            .filter(user => {
+                // 該当するunit_idのポイントが存在するかを直接チェック
+                return user.points && user.points[selectedUnitId] !== undefined;
+            })
+            .sort((a, b) => {
+                const pointsA = a.points[selectedUnitId] || 0;
+                const pointsB = b.points[selectedUnitId] || 0;
+                return pointsB - pointsA; // 降順にソート
+            });
+    }, [rankings, selectedUnitId]);
+
+
+    useEffect(() => {
+        console.log('Raw Rankings Data:', rankings);
+    }, [rankings]);
+
+    const handleSave = async (userId, newPoints) => {
+        try {
+            await onUpdatePoints(userId, newPoints, selectedUnitId);
+            setEditingUserId(null);
+        } catch (error) {
+            console.error('Failed to update points:', error);
+            // エラー処理は上位コンポーネントで行う
+        }
+    };
 
     return (
         <div className="space-y-3">
             {sortedRankings.map((user, index) => (
                 editingUserId === user.user_id ? (
                     // 編集モード: 縦に展開
-                    <div key={user.user_id} className="bg-white p-4 rounded-lg shadow-sm">
+                    <div key={`${user.user_id}-${selectedUnitId}`} className="bg-white p-4 rounded-lg shadow-sm">
                         <div className="flex items-center gap-3 mb-4">
                             <span className="text-sm font-medium text-gray-500 w-8">#{index + 1}</span>
                             {user.avatar ? (
@@ -52,11 +70,11 @@ const RankingList = ({ rankings, pointUnit, onUpdatePoints }) => {
                             <span className="font-medium">{user.displayName}</span>
                         </div>
                         <UserPointsForm
-                            user={user}  // 正規化せずに生のデータを渡す
-
+                            user={user}
+                            pointUnit={currentPointUnit.name}
+                            selectedUnitId={selectedUnitId}
                             onSave={handleSave}
                             onCancel={() => setEditingUserId(null)}
-                            pointUnit={pointUnit}
                         />
                     </div>
                 ) : (
@@ -84,7 +102,7 @@ const RankingList = ({ rankings, pointUnit, onUpdatePoints }) => {
                             </div>
                             <div className="flex items-center gap-2 flex-shrink-0 ml-4">
                                 <span className="font-medium whitespace-nowrap">
-                                    {normalizePoints(user.points).toLocaleString()} {pointUnit}
+                                    {getPointsByUnitId(user.points, selectedUnitId).toLocaleString()} {currentPointUnit.name}
                                 </span>
                                 <button
                                     onClick={() => setEditingUserId(user.user_id)}

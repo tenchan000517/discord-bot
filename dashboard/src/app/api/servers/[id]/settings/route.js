@@ -18,62 +18,43 @@ export async function GET(request, { params }) {
 
     try {
         const aws = new AWSWrapper();
-        console.log("Fetching server data from AWS..."); // AWSデータ取得ログ
         const serverData = await aws.getServerData(id);
 
-        // AWSデータ詳細ログ
-        console.log("AWS Server Data Response:", JSON.stringify(serverData, null, 2));
-
-        // サーバーデータのチェックと補完
-        if (!serverData.settings.feature_settings) {
-            console.warn("Feature settings missing. Applying defaults...");
-            serverData.settings.feature_settings = {
-                battle: {
-                    enabled: false,
-                    points_per_kill: 0,
-                    winner_points: 0,
-                    start_delay_minutes: 0
-                },
-                gacha: {
-                    enabled: false,
-                    items: [],
-                    messages: {
-                        setup: 'Default setup message',
-                        daily: 'Default daily message',
-                        win: 'Default win message',
-                        custom_messages: {}
-                    },
-                    media: {
-                        setup_image: 'https://default.setup.image/url',
-                        banner_gif: 'https://default.banner.gif/url'
-                    }
-                },
-                fortune: {
-                    enabled: false
-                }
-            };
-        }
-
-        // Gacha設定補完
-        if (serverData.settings.feature_settings.gacha) {
+        // ガチャ設定の構造チェックと変換
+        if (serverData.settings?.feature_settings?.gacha) {
             const gachaSettings = serverData.settings.feature_settings.gacha;
+            let needsUpdate = false;
+                    
+            if (gachaSettings.gacha_list) {
+                // channel_idが存在するのにガチャIDが違うものを修正
+                serverData.settings.feature_settings.gacha.gacha_list = gachaSettings.gacha_list
+                    .filter((gacha, index, self) => 
+                        // channel_idが設定されている場合、そのチャンネルの最初のガチャのみ残す
+                        gacha.channel_id ? 
+                            index === self.findIndex(g => g.channel_id === gacha.channel_id) : 
+                            true
+                    )
+                    .map(gacha => {
+                        if (gacha.channel_id) {
+                            // チャンネルIDが存在する場合、名前を更新
+                            const updatedGacha = {
+                                ...gacha,
+                                gacha_id: gacha.channel_id, // channel_idをガチャIDとして使用
+                                name: gacha.name === "デフォルトガチャ" ? 
+                                    `デフォルトガチャ (${gacha.channel_id})` : 
+                                    gacha.name
+                            };
+                            needsUpdate = true;
+                            return updatedGacha;
+                        }
+                        return gacha;
+                    });
+            }
 
-            console.log("Before Gacha Completion:", JSON.stringify(gachaSettings, null, 2)); // 補完前ログ
-
-            // messages と media の補完処理
-            gachaSettings.messages = gachaSettings.messages || {
-                setup: 'Default setup message',
-                daily: 'Default daily message',
-                win: 'Default win message',
-                custom_messages: {}
-            };
-
-            gachaSettings.media = gachaSettings.media || {
-                setup_image: 'https://default.setup.image/url',
-                banner_gif: 'https://default.banner.gif/url'
-            };
-
-            console.log("After Gacha Completion:", JSON.stringify(gachaSettings, null, 2)); // 補完後ログ
+            if (needsUpdate) {
+                await aws.updateFeatureSettings(id, serverData.settings.feature_settings);
+                console.log("Cleaned up and updated gacha settings");
+            }
         }
 
         // Discordからユーザー情報を取得
@@ -157,21 +138,24 @@ export async function PUT(request, { params }) {
         } else if (section === 'feature-settings') {
             console.log("Updating feature settings...");
             
-            // ガチャ設定の補完処理を追加
-            if (settings.feature_settings.gacha) {
-                settings.feature_settings.gacha = {
-                    ...settings.feature_settings.gacha,
-                    messages: settings.feature_settings.gacha.messages || {
-                        setup: 'Default setup message',
-                        daily: 'Default daily message',
-                        win: 'Default win message',
-                        custom_messages: {}
-                    },
-                    media: settings.feature_settings.gacha.media || {
-                        setup_image: '',
-                        banner_gif: ''
-                    }
-                };
+            // ガチャ設定の構造を維持
+            if (settings.feature_settings?.gacha) {
+                const gachaSettings = settings.feature_settings.gacha;
+                if (!gachaSettings.gacha_list) {
+                    // 古い形式のデータを新しい形式に変換して保存
+                    const channelId = settings.channel_id || "default";
+                    settings.feature_settings.gacha = {
+                        ...gachaSettings,
+                        gacha_list: [{
+                            gacha_id: channelId,
+                            name: `デフォルトガチャ (${channelId})`, // チャンネルIDを名前に追加
+                            enabled: gachaSettings.enabled ?? false,
+                            items: gachaSettings.items || [],
+                            messages: gachaSettings.messages || {},
+                            media: gachaSettings.media || {}
+                        }]
+                    };
+                }
             }
             
             response = await aws.updateFeatureSettings(id, settings.feature_settings);
@@ -189,6 +173,52 @@ export async function PUT(request, { params }) {
         });
     } catch (error) {
         console.error('API Error:', error); // エラーログ
+        return NextResponse.json(
+            { 
+                error: 'Internal server error',
+                details: error.message
+            },
+            { status: 500 }
+        );
+    }
+}
+
+export async function DELETE(request, { params }) {
+    const { id } = params;
+    const { searchParams } = new URL(request.url);
+    const gachaId = searchParams.get('gachaId');
+
+    console.log("Delete request received for gacha ID:", gachaId, "in server:", id);
+
+    // セッションチェック
+    const session = await getServerSession(authOptions);
+    if (!session) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    try {
+        const aws = new AWSWrapper();
+        const serverData = await aws.getServerData(id);
+
+        if (!serverData.settings?.feature_settings?.gacha?.gacha_list) {
+            return NextResponse.json({ error: "Gacha settings not found" }, { status: 404 });
+        }
+
+        // ガチャリストから指定されたガチャを除外
+        const updatedGachaList = serverData.settings.feature_settings.gacha.gacha_list
+            .filter(gacha => gacha.gacha_id !== gachaId);
+
+        // 更新されたガチャリストで設定を更新
+        serverData.settings.feature_settings.gacha.gacha_list = updatedGachaList;
+        
+        await aws.updateFeatureSettings(id, serverData.settings.feature_settings);
+
+        return NextResponse.json({
+            success: true,
+            message: "Gacha deleted successfully"
+        });
+    } catch (error) {
+        console.error('API Error:', error);
         return NextResponse.json(
             { 
                 error: 'Internal server error',
