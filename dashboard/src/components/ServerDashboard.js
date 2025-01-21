@@ -30,6 +30,7 @@ import ConsumptionHistory from './ConsumptionHistory';
 import { createPointsUpdateData } from '@/utils/gachaHelper';
 import FreeConsumptionHistory from './ServerDashboard/FreeConsumptionHistory';
 import SubscriptionEditorForm from '@/components/EditForms/SubscriptionEditorForm';
+import { UserPointsDisplay } from '@/components/Displays/UserPointsDisplay';
 
 // ポイントデータを正規化するヘルパー関数
 const normalizePoints = (points) => {
@@ -49,6 +50,7 @@ const menuItems = [
     items: [
       { id: 'dashboard', label: 'ダッシュボード', icon: BarChart3 },
       { id: 'user-analysis', label: 'ユーザー分析', icon: Users },
+      { id: 'point-management', label: 'ポイント管理', icon: Coins },
       { id: 'consumption-history', label: 'ポイント消費履歴', icon: History } // 追加
     ]
   },
@@ -546,6 +548,16 @@ const ServerDashboard = () => {
                 onUpdate={() => fetchServerData(selectedServerId)}
              /> */}
             </div>
+          </div>
+        );
+
+      case 'point-management':
+        return (
+          <div className="bg-white rounded-lg shadow-sm">
+            <UserPointsDisplay
+              serverId={selectedServerId}
+              globalSettings={serverData.settings.global_settings}
+            />
           </div>
         );
 

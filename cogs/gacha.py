@@ -427,22 +427,22 @@ class GachaView(discord.ui.View):
             )
 
             # 複数ポイント管理が有効な場合、他のポイント情報も表示
-            if settings.global_settings.multiple_points_enabled:
-                embed.add_field(name="\u200b", value="\u200b", inline=False)  # 空白行を追加
-                embed.add_field(
-                    name="その他のポイント",
-                    value="以下は他のポイント種別の残高です：",
-                    inline=False
-                )
+            # if settings.global_settings.multiple_points_enabled:
+            #     embed.add_field(name="\u200b", value="\u200b", inline=False)  # 空白行を追加
+            #     embed.add_field(
+            #         name="その他のポイント",
+            #         value="以下は他のポイント種別の残高です：",
+            #         inline=False
+            #     )
                 
-                for unit in settings.global_settings.point_units:
-                    if unit.unit_id != point_unit_id:  # 現在のポイント以外を表示
-                        other_points = await self.bot.point_manager.get_points(server_id, user_id, unit.unit_id)
-                        embed.add_field(
-                            name=unit.name,
-                            value=f"{other_points:,} pt",
-                            inline=True
-                        )
+            #     for unit in settings.global_settings.point_units:
+            #         if unit.unit_id != point_unit_id:  # 現在のポイント以外を表示
+            #             other_points = await self.bot.point_manager.get_points(server_id, user_id, unit.unit_id)
+            #             embed.add_field(
+            #                 name=unit.name,
+            #                 value=f"{other_points:,} pt",
+            #                 inline=True
+            #             )
 
             await interaction.response.send_message(embed=embed, ephemeral=True)
                     
@@ -552,6 +552,8 @@ class Gacha(commands.Cog):
         """ガチャの初期設定とパネルの設置"""
         try:
 
+            await interaction.response.defer(ephemeral=True)
+
             # サーバーIDとチャンネルIDを先に取得
             server_id = str(interaction.guild_id)
             channel_id = str(interaction.channel_id)
@@ -586,7 +588,7 @@ class Gacha(commands.Cog):
                     'use_external_emojis': '外部の絵文字を使用'
                 }
                 missing_perms_jp = [permission_names.get(perm, perm) for perm in missing_perms]
-                await interaction.response.send_message(
+                await interaction.followup.send(
                     f"チャンネル設定で以下の権限をボットに付与してください：\n"
                     f"```\n{', '.join(missing_perms_jp)}\n```",
                     ephemeral=True
@@ -642,9 +644,6 @@ class Gacha(commands.Cog):
             gacha_feature.gacha_list.append(new_gacha)
             settings.gacha_settings = gacha_feature
 
-            # print(f"[DEBUG] Updated gacha_feature type: {type(gacha_feature)}")
-            # print(f"[DEBUG] Updated gacha_feature content: {gacha_feature}")
-
             # 設定を保存
             if not await self.bot.settings_manager.update_settings(server_id, settings):
                 await interaction.followup.send(
@@ -692,142 +691,28 @@ class Gacha(commands.Cog):
             print(f"[ERROR] Setup failed: {error_msg}")
             await interaction.followup.send("ガチャパネルの設置中にエラーが発生しました。", ephemeral=True)
 
-    @app_commands.command(name="setup_additional_gacha", description="追加のガチャを設定します")
-    @app_commands.checks.has_permissions(administrator=True)
-    async def setup_additional_gacha(
-        self,
-        interaction: discord.Interaction,
-        description: Optional[str] = None
-    ):
-        """追加ガチャの設定とパネルの設置"""
-        try:
-            server_id = str(interaction.guild_id)
-            channel_id = str(interaction.channel_id)
-            
-            # チャンネル名を取得
-            channel = interaction.channel
-            channel_name = channel.name
-            gacha_name = f"ガチャ-{channel_name}"
-
-            # サーバー設定を取得
-            settings = await self.bot.get_server_settings(server_id)
-            if not settings or not settings.gacha_settings.enabled:
-                await interaction.response.send_message(
-                    "このサーバーではガチャ機能が無効になっています。",
-                    ephemeral=True
-                )
-                return
-
-            # チャンネルの重複チェック
-            for existing_gacha in settings.gacha_settings.gacha_list:
-                if existing_gacha.channel_id == channel_id:
-                    await interaction.response.send_message(
-                        "このチャンネルには既にガチャが設定されています。",
-                        ephemeral=True
-                    )
-                    return
-
-            # ポイントユニットIDの設定
-            point_unit_id = "1"  # デフォルト値
-            if settings.global_settings.multiple_points_enabled:
-                # 利用可能なポイントユニットがある場合は最初のものを使用
-                if settings.global_settings.point_units:
-                    point_unit_id = settings.global_settings.point_units[0].unit_id
-                    print(f"[DEBUG] Selected point unit ID: {point_unit_id}")
-
-            # ポイント単位名の取得
-            point_unit_name = settings.global_settings.point_unit
-            if settings.global_settings.multiple_points_enabled:
-                point_unit = next(
-                    (unit for unit in settings.global_settings.point_units 
-                    if unit.unit_id == point_unit_id),
-                    None
-                )
-                if point_unit:
-                    point_unit_name = point_unit.name
-
-            # デフォルト設定からガチャを作成
-            default_settings = self.bot.settings_manager._create_default_settings(server_id)
-            default_gacha = default_settings.gacha_settings.gacha_list[0]
-
-            # 新しいガチャ設定を作成
-            new_gacha = GachaSettings(
-                gacha_id=channel_id,
-                name=gacha_name,
-                channel_id=channel_id,
-                description=description,
-                enabled=True,
-                messages=default_gacha.messages,
-                media=default_gacha.media,
-                items=default_gacha.items,
-                point_unit_id=point_unit_id  # ポイントユニットIDを設定
-            )
-
-            # gacha_listに追加
-            settings.gacha_settings.gacha_list.append(new_gacha)
-
-            # 設定を保存
-            if not await self.bot.settings_manager.update_settings(server_id, settings):
-                await interaction.response.send_message(
-                    "ガチャ設定の保存に失敗しました。",
-                    ephemeral=True
-                )
-                return
-
-            # パネルの作成と送信
-            embed = await self._create_panel_embed(new_gacha, settings)
-            view = GachaView(self.bot, new_gacha.gacha_id)
-            await interaction.channel.send(embed=embed, view=view)
-
-            # 完了メッセージ
-            complete_embed = discord.Embed(
-                title="セットアップ完了",
-                description=(
-                    f"ガチャ「{gacha_name}」の設置が完了しました。\n"
-                    f"ポイント単位: {point_unit_name}"
-                ),
-                color=0x00ff00
-            )
-            temp_message = await interaction.channel.send(embed=complete_embed)
-
-            await asyncio.sleep(3)
-            try:
-                await temp_message.delete()
-            except Exception as e:
-                print(f"[WARN] Failed to delete temporary message: {e}")
-
-            await interaction.response.send_message(
-                f"ガチャパネルの設置が完了しました！\nポイント単位: {point_unit_name}",
-                ephemeral=True
-            )
-
-        except Exception as e:
-            error_msg = f"エラーが発生しました: {str(e)}\n{traceback.format_exc()}"
-            print(f"[ERROR] Setup failed: {error_msg}")
-            await interaction.followup.send("ガチャパネルの設置中にエラーが発生しました。", ephemeral=True)
-
     @app_commands.command(name="gacha_panel", description="ガチャパネルを設置します")
     @app_commands.checks.has_permissions(administrator=True)
     async def gacha_panel(self, interaction: discord.Interaction):
         """ガチャパネルを設置"""
+        channel = interaction.channel
+        
         try:
-            # サーバーIDとチャンネルIDを先に取得
+            # 直接チャンネルにメッセージを送信
+            print("[DEBUG] Starting gacha panel setup...")
+            
+            # サーバーIDとチャンネルIDを取得
             server_id = str(interaction.guild_id)
             channel_id = str(interaction.channel_id)
+            
+            print(f"[DEBUG] Server ID: {server_id}, Channel ID: {channel_id}")
 
             # サーバー設定を取得
             settings = await self.bot.get_server_settings(server_id)
+            print(f"[DEBUG] Server settings retrieved: {settings is not None}")
 
-            # デバッグログ
-            # print(f"[DEBUG] Retrieved settings for panel setup: {settings}")
-            # print(f"[DEBUG] Multiple points enabled: {settings.global_settings.multiple_points_enabled}")
-
-            # 設定をチェック
-            if not settings.gacha_settings.enabled:
-                await interaction.response.send_message(
-                    "このサーバーではガチャ機能が無効になっています。",
-                    ephemeral=True
-                )
+            if not settings or not settings.gacha_settings.enabled:
+                await channel.send("このサーバーではガチャ機能が無効になっています。", delete_after=5)
                 return
 
             # 該当チャンネルのガチャを検索
@@ -836,11 +721,13 @@ class Gacha(commands.Cog):
                 if gacha.channel_id == channel_id),
                 None
             )
+            
+            print(f"[DEBUG] Gacha settings found: {gacha_settings is not None}")
 
             if not gacha_settings:
-                await interaction.response.send_message(
+                await channel.send(
                     "このチャンネルにはガチャが設定されていません。先に /gacha_setup を実行してください。",
-                    ephemeral=True
+                    delete_after=5
                 )
                 return
 
@@ -854,38 +741,11 @@ class Gacha(commands.Cog):
                 )
                 if point_unit:
                     point_unit_name = point_unit.name
-                    print(f"[DEBUG] Using point unit: {point_unit_name} (ID: {gacha_settings.point_unit_id})")
-
-            # 必要な権限をチェック
-            required_permissions = {
-                "send_messages": True,
-                "embed_links": True,
-                "attach_files": True,
-                "use_external_emojis": True,
-            }
-
-            missing_perms = self._check_permissions(interaction.channel, required_permissions)
-            if missing_perms:
-                permission_names = {
-                    'send_messages': 'メッセージを送信',
-                    'embed_links': '埋め込みリンク',
-                    'attach_files': 'ファイルを添付',
-                    'use_external_emojis': '外部の絵文字を使用'
-                }
-                missing_perms_jp = [permission_names.get(perm, perm) for perm in missing_perms]
-                await interaction.response.send_message(
-                    f"チャンネル設定で以下の権限をボットに付与してください：\n"
-                    f"```\n{', '.join(missing_perms_jp)}\n```",
-                    ephemeral=True
-                )
-                return
-
-            await interaction.response.defer(ephemeral=True)
+                    print(f"[DEBUG] Using point unit: {point_unit_name}")
 
             # パネルの作成と送信
             embed = await self._create_panel_embed(gacha_settings)
             
-            # 複数ポイント管理が有効な場合、ポイント単位情報を追加
             if settings.global_settings.multiple_points_enabled:
                 embed.add_field(
                     name="ポイント単位",
@@ -893,108 +753,28 @@ class Gacha(commands.Cog):
                     inline=False
                 )
 
+            print("[DEBUG] Sending gacha panel...")
             view = GachaView(self.bot, gacha_settings.gacha_id)
-            await interaction.channel.send(embed=embed, view=view)
+            await channel.send(embed=embed, view=view)
 
-            # 一時的な成功メッセージを送信
+            # 完了メッセージ
             complete_embed = discord.Embed(
                 title="ガチャパネル設置完了",
-                description=(
-                    f"ガチャ「{gacha_settings.name}」のパネルを設置しました。\n"
-                    f"ポイント単位: {point_unit_name}"
-                ),
+                description=f"ガチャ「{gacha_settings.name}」のパネルを設置しました。",
                 color=0x00ff00
             )
-            temp_message = await interaction.channel.send(embed=complete_embed)
-
-            # 一時メッセージを3秒後に削除
+            
+            temp_message = await channel.send(embed=complete_embed)
             await asyncio.sleep(3)
-            try:
-                await temp_message.delete()
-            except Exception as e:
-                print(f"[WARN] Failed to delete temporary message: {e}")
+            await temp_message.delete()
 
-            await interaction.followup.send(
-                f"ガチャパネルの設置が完了しました！\nポイント単位: {point_unit_name}",
-                ephemeral=True
-            )
+            print("[DEBUG] Gacha panel setup completed successfully")
 
         except Exception as e:
             error_msg = f"エラーが発生しました: {str(e)}\n{traceback.format_exc()}"
             print(f"[ERROR] Panel setup failed: {error_msg}")
-            await interaction.followup.send(
-                "ガチャパネルの設置中にエラーが発生しました。",
-                ephemeral=True
-            )
-
-    @app_commands.command(name="set_tweet_message", description="X投稿時の追加メッセージを設定します")
-    @app_commands.checks.has_permissions(administrator=True)
-    async def set_tweet_message(
-        self,
-        interaction: discord.Interaction,
-        message: Optional[str] = None,
-        gacha_id: Optional[str] = None
-    ):
-        server_id = str(interaction.guild_id)
-        settings = await self.bot.get_server_settings(server_id)
-        
-        if not settings:
-            await interaction.response.send_message(
-                "設定の取得に失敗しました。",
-                ephemeral=True
-            )
-            return
-
-
-        gacha_feature = settings['feature_settings'].get('gacha', {})
-        if not isinstance(gacha_feature, dict) or 'gacha_list' not in gacha_feature:
-            await interaction.response.send_message(
-                "ガチャ設定が見つかりません。",
-                ephemeral=True
-            )
-            return
-
-        if gacha_id:
-            # 特定のガチャのメッセージを更新
-            gacha = next(
-                (g for g in settings.gacha_settings.gacha_list if g.gacha_id == gacha_id),
-                None
-            )
-            if not gacha:
-                await interaction.response.send_message(
-                    "指定されたガチャが見つかりません。",
-                    ephemeral=True
-                )
-                return
-
-            if 'messages' not in gacha:
-                gacha['messages'] = {}
-            
-            gacha.messages.tweet_message = message
-        else:
-            # チャンネルに紐づくガチャを検索
-            channel_id = str(interaction.channel_id)
-            gacha = next(
-                (g for g in settings.gacha_settings.gacha_list if g.channel_id == channel_id),
-                None
-            )
-            if not gacha:
-                await interaction.response.send_message(
-                    "このチャンネルにはガチャが設定されていません。",
-                    ephemeral=True
-                )
-                return
-            
-            if 'messages' not in gacha:
-                gacha['messages'] = {}
-            gacha['messages']['tweet_message'] = message
-
-        # 設定を保存
-        if await self.bot.update_server_settings(server_id, settings):
-            response = f"ガチャ「{gacha['name']}」のX投稿時の追加メッセージを設定しました。" if message else f"ガチャ「{gacha['name']}」のX投稿時の追加メッセージを削除しました。"
-            await interaction.response.send_message(response, ephemeral=True)
-        else:
-            await interaction.response.send_message("設定の保存に失敗しました。", ephemeral=True)
+            if channel:
+                await channel.send("ガチャパネルの設置中にエラーが発生しました。", delete_after=5)
 
 async def setup(bot):
     await bot.add_cog(Gacha(bot))

@@ -67,7 +67,15 @@ class PointsConsumption(commands.Cog):
         wallet_address: str = None,
         email: str = None
     ) -> dict:
-        """消費リクエストの作成"""
+        """
+        
+        消費リクエストの作成
+        
+        呼び出し先
+        aws_database.py
+            save_consumption_history
+        
+        """
         try:
             timestamp = datetime.now(pytz.UTC).isoformat()
             request_data = {
@@ -203,7 +211,7 @@ class PointsConsumption(commands.Cog):
                 print("[DEBUG] Handling approve button")
                 print(f"[DEBUG] Custom ID parts: {custom_id.split('_')}")
                 await self.handle_approve_button(interaction)
-                
+
             elif custom_id.startswith('cancel_consume_'):
                 print("[DEBUG] Handling cancel button")
                 await self.handle_cancel_button(interaction)

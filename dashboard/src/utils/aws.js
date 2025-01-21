@@ -232,33 +232,33 @@ export class AWSWrapper {
             // 更新式とパラメータを動的に構築
             let updateExpression = 'SET ';
             const expressionAttributeValues = {};
-            
+
             // last_modified は常に更新
             updateExpression += 'last_modified = :lm';
             expressionAttributeValues[':lm'] = new Date().toISOString();
-    
+
             // global_settings が存在する場合
             if (settings.global_settings) {
                 updateExpression += ', global_settings = :gs';
                 expressionAttributeValues[':gs'] = settings.global_settings;
             }
-    
+
             // subscription_settings が存在する場合
             if (settings.subscription_settings) {
                 updateExpression += ', subscription_settings = :ss';
                 expressionAttributeValues[':ss'] = settings.subscription_settings;
             }
-    
+
             // subscription_status が存在する場合のみ更新
             if (settings.subscription_status) {
                 updateExpression += ', subscription_status = :st';
                 expressionAttributeValues[':st'] = settings.subscription_status;
             }
-    
+
             // version が存在する場合（デフォルト値: 1）
             updateExpression += ', version = :v';
             expressionAttributeValues[':v'] = settings.version || 1;
-    
+
             const command = new UpdateCommand({
                 TableName: 'server_settings',
                 Key: {
@@ -268,7 +268,7 @@ export class AWSWrapper {
                 ExpressionAttributeValues: expressionAttributeValues,
                 ReturnValues: 'ALL_NEW'
             });
-    
+
             const response = await this.docClient.send(command);
             return response.Attributes;
         } catch (error) {
@@ -298,6 +298,42 @@ export class AWSWrapper {
             return response.Attributes;
         } catch (error) {
             console.error("Error updating feature settings:", error);
+            throw error;
+        }
+    }
+
+    /**
+     * 特定のサーバーに所属するユーザーのポイントデータを取得します
+     * @param {string} serverId - 対象のDiscordサーバーID
+     * @returns {Promise<Object[]>} ユーザーポイントデータの配列
+     * @throws {Error} DynamoDBのクエリに失敗した場合
+     */
+    async getUserPoints(serverId) {
+        try {
+            const command = new QueryCommand({
+                TableName: 'discord_users',
+                IndexName: 'ServerIndex',
+                KeyConditionExpression: 'server_id = :sid',
+                ExpressionAttributeValues: {
+                    ':sid': serverId,
+                }
+            });
+
+            const response = await this.docClient.send(command);
+
+            // PKからunit_idを抽出し、実際のデータ構造を維持
+            return response.Items.map(item => {
+                const unitId = item.pk.split('#').pop(); // UNIT#1 から 1 を取得
+                return {
+                    user_id: item.user_id,
+                    server_id: item.server_id,
+                    unit_id: unitId,
+                    points: item.points, // 数値のまま
+                    updated_at: item.updated_at
+                };
+            });
+        } catch (error) {
+            console.error('Error in getUserPoints:', error);
             throw error;
         }
     }
@@ -755,12 +791,12 @@ export class AWSWrapper {
                 },
                 ReturnValues: 'ALL_NEW'
             };
-    
+
             // 新しいSDKのスタイルに合わせる
             const command = new UpdateCommand(params);
             const result = await this.docClient.send(command);
             return result.Attributes;
-            
+
         } catch (error) {
             console.error('Error updating consumption status:', error);
             return null;

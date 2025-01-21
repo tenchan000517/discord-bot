@@ -15,3 +15,7 @@ export const Alert = ({ children, variant = 'error' }) => {
     </div>
   );
 };
+
+export const AlertDescription = ({ children }) => {
+  return <div className="mt-2 text-sm">{children}</div>;
+};

@@ -538,7 +538,6 @@ async def setup(bot):
     try:
         await bot.add_cog(BattleRoyale(bot))
         print("[Battle] Successfully added Battle Royale Cog")
-        print("[Battle] Command tree synced status:", bot.tree._synced)  # コマンドツリーの同期状態を確認
     except Exception as e:
         print(f"[Battle] Failed to add cog: {e}")
         print(traceback.format_exc())

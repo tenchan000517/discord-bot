@@ -427,22 +427,22 @@ class GachaView(discord.ui.View):
             )
 
             # 複数ポイント管理が有効な場合、他のポイント情報も表示
-            if settings.global_settings.multiple_points_enabled:
-                embed.add_field(name="\u200b", value="\u200b", inline=False)  # 空白行を追加
-                embed.add_field(
-                    name="その他のポイント",
-                    value="以下は他のポイント種別の残高です：",
-                    inline=False
-                )
+            # if settings.global_settings.multiple_points_enabled:
+            #     embed.add_field(name="\u200b", value="\u200b", inline=False)  # 空白行を追加
+            #     embed.add_field(
+            #         name="その他のポイント",
+            #         value="以下は他のポイント種別の残高です：",
+            #         inline=False
+            #     )
                 
-                for unit in settings.global_settings.point_units:
-                    if unit.unit_id != point_unit_id:  # 現在のポイント以外を表示
-                        other_points = await self.bot.point_manager.get_points(server_id, user_id, unit.unit_id)
-                        embed.add_field(
-                            name=unit.name,
-                            value=f"{other_points:,} pt",
-                            inline=True
-                        )
+            #     for unit in settings.global_settings.point_units:
+            #         if unit.unit_id != point_unit_id:  # 現在のポイント以外を表示
+            #             other_points = await self.bot.point_manager.get_points(server_id, user_id, unit.unit_id)
+            #             embed.add_field(
+            #                 name=unit.name,
+            #                 value=f"{other_points:,} pt",
+            #                 inline=True
+            #             )
 
             await interaction.response.send_message(embed=embed, ephemeral=True)
                     

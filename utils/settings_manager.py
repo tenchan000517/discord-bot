@@ -23,7 +23,17 @@ class ServerSettingsManager:
         return settings
 
     async def update_feature_settings(self, server_id: str, feature: str, new_settings: Dict[str, Any]) -> bool:
-        """機能別の設定を更新"""
+        """機能別の設定を更新
+        
+        cogs\modals.py
+        cogs\settings\modals\base.py
+        cogs\settings\modals\battle_settings.py
+        cogs\settings\modals\fortunes_settings.py
+        cogs\settings\modals\gacha_items.py
+        cogs\settings\modals\gacha_settings.py
+        cogs\settings\modals\global_settings.py
+        
+        """
         try:
             # 現在の設定を取得
             current_settings = await self.get_settings(server_id)
