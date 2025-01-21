@@ -848,7 +848,7 @@ class Gacha(commands.Cog):
             
             if settings.global_settings.multiple_points_enabled:
                 embed.add_field(
-                    name="ポイント単位",
+                    name="pool",
                     value=point_unit_name,
                     inline=False
                 )
