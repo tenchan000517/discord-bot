@@ -40,13 +40,22 @@ class MessageSettings:
     win: str
     custom_messages: Dict[str, str] = None  # デフォルト値を None に設定
     tweet_message: Optional[str] = None  # 追加: X投稿用メッセージ
+    panel_title: str = "デイリーガチャ"  # パネルのタイトル
+    button_labels: Dict[str, str] = field(default_factory=lambda: {
+        'gacha': 'ガチャを回す！',
+        'share': 'ガチャ結果をXに投稿',
+        'points': 'ポイントを確認',
+    })
 
     def to_dict(self):
         return {
             'setup': self.setup,
             'daily': self.daily,
             'win': self.win,
-            'custom_messages': self.custom_messages
+            'custom_messages': self.custom_messages,
+            'tweet_message': self.tweet_message,
+            'panel_title': self.panel_title,
+            'button_labels': self.button_labels
         }
 
 @dataclass

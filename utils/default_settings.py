@@ -95,7 +95,13 @@ def create_default_settings(server_id: str) -> Dict:
                         'daily': '1日1回ガチャが回せます！\n下のボタンを押してガチャを実行してください。',
                         'win': '',
                         'custom_messages': {},
-                        'tweet_message': None
+                        'tweet_message': None,
+                        'panel_title': 'デイリーガチャ',
+                        'button_labels': {
+                            'gacha': 'ガチャを回す！',
+                            'share': 'ガチャ結果をXに投稿',
+                            'points': 'ポイントを確認'
+                        }
                     },
                     'media': {
                         'setup_image': 'https://nft-mint.xyz/gacha/gacha1.png',

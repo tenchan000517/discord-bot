@@ -642,15 +642,14 @@ class Gacha(commands.Cog):
     async def gacha_setup(self, interaction: discord.Interaction):
         """ガチャの初期設定とパネルの設置"""
         try:
-
-            # 直接チャンネルにメッセージを送信
-            print("[DEBUG] Starting gacha panel setup...")
+            
+            print("[DEBUG] Starting gacha_setup")  # デバッグログ追加
+            await interaction.response.defer(ephemeral=True)
+            print("[DEBUG] Defer completed")  # デバッグログ追加
 
             # サーバーIDとチャンネルIDを先に取得
             server_id = str(interaction.guild_id)
             channel_id = str(interaction.channel_id)
-
-            print(f"[DEBUG] Server ID: {server_id}, Channel ID: {channel_id}")
 
             # チャンネル名を取得
             channel = interaction.channel
