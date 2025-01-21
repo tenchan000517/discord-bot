@@ -586,7 +586,7 @@ class Gacha(commands.Cog):
         # カスタムタイトルがある場合は大きく表示
         display_title = ""
         if settings.messages and hasattr(settings.messages, 'panel_title'):
-            display_title = f"{panel_title}\n\n"  # Discordの新しいMarkdown記法で大きく表示
+            display_title = f"## 《 {panel_title} 》\n\n"  # Discordの新しいMarkdown記法で大きく表示
 
         # Embed の作成
         embed = discord.Embed(
