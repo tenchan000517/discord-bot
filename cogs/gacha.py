@@ -583,10 +583,15 @@ class Gacha(commands.Cog):
             else "デイリーガチャ"
         )
 
+        # カスタムタイトルがある場合は大きく表示
+        display_title = ""
+        if settings.messages and hasattr(settings.messages, 'panel_title'):
+            display_title = f"{panel_title}\n\n"  # Discordの新しいMarkdown記法で大きく表示
+
         # Embed の作成
         embed = discord.Embed(
-            title=panel_title,
-            description=daily_message,
+            title="",  # タイトルフィールドは空にする
+            description=f"{display_title}{daily_message}",  # タイトルとメッセージを結合
             color=0x00ff00
         )
         
