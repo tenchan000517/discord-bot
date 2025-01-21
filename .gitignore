@@ -78,3 +78,18 @@ dashboard/
 dynamodb_backup/
 
 /dynamodb_backup
+
+# ディレクトリ
+/dashboard/
+/backups/
+
+# Python files
+check_*.py
+*_migration.py
+create_*.py
+test.py
+requirements.txt
+
+# Backup and log files
+*.log
+*.json
