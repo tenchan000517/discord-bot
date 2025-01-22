@@ -967,7 +967,12 @@ class PointConsumptionModal(discord.ui.Modal):
             ValueError: 設定が不正な場合
         """
 
-        self.interaction = interaction  # interactionを先に保存
+        if not settings.point_consumption_settings.modal_settings.title:
+            super().__init__(title="ポイント消費")  # デフォルトタイトル
+        else:
+            super().__init__(title=settings.point_consumption_settings.modal_settings.title)
+        
+        self.interaction = interaction
 
         # super().__init__(title=settings.point_consumption_settings.modal_settings.title)
 
