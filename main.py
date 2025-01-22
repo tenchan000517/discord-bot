@@ -12,6 +12,14 @@ from utils.reward_manager import RewardManager
 
 import traceback
 
+import logging
+
+# ロギング設定
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+
 load_dotenv()
 
 # 環境変数の読み込み
@@ -80,21 +88,30 @@ class GachaBot(commands.Bot):
             for ext in ['gacha', 'fortunes', 'battle', 'automation', 'rewards', 'points_consumption', 'token_transfer']:
                 try:
                     await self.load_extension(f'cogs.{ext}')
+                    logging.info(f"Loaded {ext} extension")
+
                     print(f"Loaded {ext} extension")
                     extension_status.append(f"{ext.capitalize()}: ✅")
                 except Exception as e:
                     print(f"Failed to load {ext} extension: {e}")
                     print(traceback.format_exc())
+                    logging.error(f"Failed to load {ext} extension: {e}")
+                    logging.error(traceback.format_exc())
                     extension_status.append(f"{ext.capitalize()}: ❌")
 
             print("Extension loading completed")
             print("\n".join(extension_status))
+            logging.info("Extension loading completed")
+            logging.info("\n".join(extension_status))
 
             # スラッシュコマンドを同期
             print("Starting global command sync...")
+            logging.info("Starting global command sync...")
+
             await self.tree.sync()
             print("Command sync completed")
-            
+            logging.info("Command sync completed")
+
             commands = await self.tree.fetch_commands()
             for cmd in commands:
                 print(f" - /{cmd.name}")
@@ -102,11 +119,33 @@ class GachaBot(commands.Bot):
         except Exception as e:
             print(f"Critical error in setup_hook: {e}")
             print(traceback.format_exc())
-
+            logging.critical(f"Critical error in setup_hook: {e}")
+            logging.error(traceback.format_exc())
+            
     async def on_ready(self):
         print(f'{self.user} has connected to Discord!')
         print(f'Bot is ready in {len(self.guilds)} servers.')
         print(f"Database status: {'Available' if self.db_available else 'Unavailable'}")
+
+        # Loaded cogsの確認を追加
+        print('[DEBUG] Loaded cogs:')
+        for cog in self.cogs:
+            print(f'- {cog}')
+            
+    # ここにエラーハンドラを追加
+    async def on_application_command_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError):
+        print(f'[ERROR] Command error occurred:')
+        print(f'Command: {interaction.command.name if interaction.command else "Unknown"}')
+        print(f'Error: {str(error)}')
+        print(f'Error type: {type(error)}')
+        print(traceback.format_exc())
+
+        if isinstance(error, discord.errors.InteractionResponded):
+            print("Detected stale interaction, attempting to resync...")
+            try:
+                await self.tree.sync(guild=interaction.guild)
+            except Exception as e:
+                print(f"Failed to resync: {e}")
 
         # 全サーバーの設定をデバッグ出力（必要ならループする）
         # for guild in self.guilds:
