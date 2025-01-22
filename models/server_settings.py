@@ -523,7 +523,17 @@ class ServerSettings:
 
         # ポイント消費設定を追加
         point_consumption_data = feature_settings.get('point_consumption', {})
-
+        modal_settings = None
+        if 'modal_settings' in point_consumption_data:
+            modal_data = point_consumption_data['modal_settings']
+            modal_settings = PointConsumptionModalSettings(
+                title=modal_data.get('title', "ポイント消費申請"),
+                fields=modal_data.get('fields', {
+                    "points": True,
+                    "wallet": False,
+                    "email": False
+                })
+            )
         point_consumption_settings = PointConsumptionFeatureSettings(
             enabled=point_consumption_data.get('enabled', True),
             button_name=point_consumption_data.get('button_name', "ポイント消費"),
@@ -533,7 +543,8 @@ class ServerSettings:
             use_thread=point_consumption_data.get('use_thread', False),
             completion_message_enabled=point_consumption_data.get('completion_message_enabled', True),
             required_points=point_consumption_data.get('required_points', 0),
-            
+            modal_settings=modal_settings,  # 明示的にmodal_settingsを渡す
+
             panel_message=point_consumption_data.get('panel_message', "クリックしてポイントの消費申請をしてください"),
             panel_title=point_consumption_data.get('panel_title', "ポイント消費"),
             thread_welcome_message=point_consumption_data.get('thread_welcome_message', "{user}こちらからポイント消費申請を行ってください\nあなたの申請可能ポイントは{points}{unit}です"),

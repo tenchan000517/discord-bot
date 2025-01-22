@@ -18,6 +18,7 @@ class PointsConsumption(commands.Cog):
     async def setup_consumption_panel(self, channel_id: str, settings: ServerSettings) -> None:
         """消費パネルのセットアップ - 複数ポイントプール対応版"""
         try:
+
             channel = self.bot.get_channel(int(channel_id))
             if not channel:
                 print(f"Channel not found: {channel_id}")
@@ -113,10 +114,7 @@ class PointsConsumption(commands.Cog):
 
             # サーバー設定の取得
             settings = await self.bot.get_server_settings(str(interaction.guild_id))
-            # settings の中身を確認
-            print(f"[DEBUG] Retrieved modal_settings.fields: {settings.point_consumption_settings.modal_settings.fields}")
-            print(f"[DEBUG] wallet field directly after retrieval: {settings.point_consumption_settings.modal_settings.fields.get('wallet')}")
-
+            
             # 設定情報の詳細ログ
             print(f"[DEBUG] Server settings loaded: {settings is not None}")
             if settings:
@@ -164,11 +162,8 @@ class PointsConsumption(commands.Cog):
                 modal = PointConsumptionModal(
                     settings,
                     available_points,
-                    unit_id,
-                    interaction  # インタラクションを渡す
-
+                    unit_id
                 )
-                await modal.initialize_wallet()  # ウォレットアドレスの初期化
                 await interaction.response.send_modal(modal)
                 
             elif custom_id.startswith('approve_consume_'):
@@ -199,6 +194,9 @@ class PointsConsumption(commands.Cog):
     async def handle_consume_button(self, interaction: discord.Interaction):
         """ポイント消費ボタンのハンドラー - デバッグログ追加版"""
         try:
+            # 直接チャンネルにメッセージを送信
+            print("[DEBUG] Starting handle_consume_button...")
+
             print(f"[DEBUG] Starting handle_consume_button for user {interaction.user.id}")
             print(f"[DEBUG] Custom ID: {interaction.data.get('custom_id')}")
             
@@ -433,10 +431,13 @@ class PointsConsumption(commands.Cog):
         # print(f"Approval button clicked with params: server_id={interaction.guild_id}, user_id={interaction.user.id}")
 
         try:
-            # インタラクションがまだ応答されていない場合のみdefer
-            if not interaction.response.is_done():
-                await interaction.response.defer(ephemeral=True)
-                
+            # print("[DEBUG] Starting approval process")
+            # print(f"[DEBUG] Interaction data: {interaction.data}")
+
+            # print(f"[DEBUG] Interaction data: {interaction.data}")
+            # print(f"[DEBUG] Approval button clicked by {interaction.user.id} in guild {interaction.guild_id}")
+            # print(f"[DEBUG] Approve button clicked by {interaction.user.id} in guild {interaction.guild_id}")
+            
             # サーバー設定の取得
             settings = await self.bot.get_server_settings(str(interaction.guild_id))
             # print(f"[DEBUG] Retrieved server settings: {settings is not None}")
@@ -507,12 +508,12 @@ class PointsConsumption(commands.Cog):
                 await self.update_missing_unit_ids(str(interaction.guild_id), settings)
                 
                 # ポイント消費実行
-                print(f"[DEBUG] Executing point consumption:")
-                print(f"  user_id: {user_id}")
-                print(f"  server_id: {str(interaction.guild_id)}")
-                print(f"  points: {-points}")
-                print(f"  unit_id: {unit_id}")
-                print(f"  source: {str(interaction.user.id)}")
+                # print(f"[DEBUG] Executing point consumption:")
+                # print(f"  user_id: {user_id}")
+                # print(f"  server_id: {str(interaction.guild_id)}")
+                # print(f"  points: {-points}")
+                # print(f"  unit_id: {unit_id}")
+                # print(f"  source: {str(interaction.user.id)}")
                 
                 success = await self.bot.point_manager.consume_points(
                     user_id=user_id,
@@ -624,15 +625,13 @@ class PointsConsumption(commands.Cog):
                         )
 
                     # print("[DEBUG] Sending success message")
-                    # 承認処理完了後のメッセージ送信
-                    try:
-                        await interaction.followup.send("承認処理が完了しました。", ephemeral=True)
-                    except discord.NotFound:
-                        # Webhookが見つからない場合は、チャンネルに直接メッセージを送信
-                        await interaction.channel.send(
-                            f"{interaction.user.mention} 承認処理が完了しました。",
-                            ephemeral=True
-                        )
+                    await interaction.followup.send("承認処理が完了しました。", ephemeral=True)
+                else:
+                    # print("[DEBUG] Point consumption failed")
+                    await interaction.followup.send(
+                        "ポイント消費に失敗しました。再試行してください。",
+                        ephemeral=True
+                    )
 
         except Exception as e:
             print(f"[ERROR] Exception in approve button: {e}")
@@ -907,114 +906,40 @@ class PointsConsumption(commands.Cog):
             raise ValueError(f"Invalid custom_id format: {custom_id}")
     
 class PointConsumptionModal(discord.ui.Modal):
-    @classmethod
-    async def get_latest_wallet_address(cls, bot, server_id: str, user_id: str) -> str | None:
-        """ユーザーの最新の承認済みウォレットアドレスを取得"""
-        try:
-            response = await asyncio.to_thread(
-                bot.db.point_consumption_history_table.scan,
-                FilterExpression='server_id = :sid AND user_id = :uid AND #status = :status AND attribute_exists(wallet_address)',
-                ExpressionAttributeNames={'#status': 'status'},
-                ExpressionAttributeValues={
-                    ':sid': server_id,
-                    ':uid': user_id,
-                    ':status': 'approved'
-                }
-            )
-            
-            if not response.get('Items'):
-                return None
-                
-            # タイムスタンプでソートして最新のウォレットアドレスを取得
-            latest_record = sorted(
-                response['Items'],
-                key=lambda x: x['timestamp'],
-                reverse=True
-            )[0]
-            
-            return latest_record.get('wallet_address')
-            
-        except Exception as e:
-            print(f"[ERROR] Failed to get wallet address: {e}")
-            return None
-
-    @classmethod
-    async def create(cls, settings: ServerSettings, available_points: int, unit_id: str, interaction: discord.Interaction):
-        """モーダルを非同期で作成するファクトリメソッド"""
-        instance = cls(settings, available_points, unit_id)
-        instance.interaction = interaction
-
-        # 最新のウォレットアドレスを取得
-        if instance.modal_settings.fields.get("wallet"):
-            current_wallet = await cls.get_latest_wallet_address(
-                interaction.client,
-                str(interaction.guild_id),
-                str(interaction.user.id)
-            )
-            if current_wallet:
-                instance.wallet.default = current_wallet
-
-        return instance
-    
-    def __init__(self, settings: ServerSettings, available_points: int, unit_id: str, interaction: discord.Interaction = None):
+    def __init__(self, settings: ServerSettings, available_points: int, unit_id: str):
         """
         モーダルの初期化
         Args:
             settings (ServerSettings): サーバー設定（データベースから取得）
             available_points (int): 利用可能なポイント
-            unit_id (str): ポイントユニットID
-        Raises:
-            ValueError: 設定が不正な場合
         """
+        # 設定の取得と検証
+        # デバッグ用のログ追加
+        # print(f"[DEBUG] Settings: {settings}")
+        # if settings:
+        #     print(f"[DEBUG] Point consumption settings: {settings.point_consumption_settings}")
+        #     if settings.point_consumption_settings:
+        #         print(f"[DEBUG] Modal settings: {settings.point_consumption_settings.modal_settings}")
 
-        self.interaction = interaction  # interactionを先に保存
-
-        # super().__init__(title=settings.point_consumption_settings.modal_settings.title)
-
-        # 詳細な設定の検証とデバッグログ
-        print("[DEBUG] === Modal Initialization Start ===")
-        print(f"[DEBUG] Raw settings object: {settings}")
-        
-        # 基本設定の存在チェック
+        # 設定の取得と検証
         if not settings:
-            print("[ERROR] Settings object is None")
-            raise ValueError("Server settings object is missing")
-
+            print("[ERROR] settings is None")
+            raise ValueError("Required settings are missing")
         if not settings.point_consumption_settings:
-            print("[ERROR] Point consumption settings is None")
-            raise ValueError("Point consumption settings is missing")
-
-        if not hasattr(settings.point_consumption_settings, 'modal_settings'):
-            print("[ERROR] Modal settings attribute is missing")
-            raise ValueError("Modal settings is missing from point consumption settings")
+            print("[ERROR] point_consumption_settings is None")
+            raise ValueError("Required settings are missing")
+        if not settings.point_consumption_settings.modal_settings:
+            print("[ERROR] modal_settings is None")
+            # modal_settingsが無い場合は、デフォルト値を設定
+            settings.point_consumption_settings.modal_settings = PointConsumptionModalSettings()
 
         modal_settings = settings.point_consumption_settings.modal_settings
-        print(f"[DEBUG] Modal settings object: {modal_settings}")
-
-        # fields設定の詳細チェック
-        if not hasattr(modal_settings, 'fields'):
-            print("[ERROR] Fields attribute is missing from modal settings")
-            raise ValueError("Fields configuration is missing from modal settings")
-
-        print(f"[DEBUG] Modal fields configuration: {modal_settings.fields}")
-        
-        # wallet設定の詳細チェック
-        if 'wallet' not in modal_settings.fields:
-            print("[ERROR] Wallet field configuration is missing")
-            raise ValueError("Wallet field is not configured in modal settings")
-
-        print(f"[DEBUG] Wallet field configuration: {modal_settings.fields['wallet']}")
-        
-        # Point unit validation
         point_unit = next(
             (unit for unit in settings.global_settings.point_units if unit.unit_id == unit_id),
             None
         )
         if not point_unit:
-            print("[ERROR] Invalid point unit ID")
-            raise ValueError(f"Point unit with ID {unit_id} not found")
-
-        # Modal initialization
+            raise ValueError("Invalid point unit")
         super().__init__(title=modal_settings.title)
         
         self.settings = settings
@@ -1024,7 +949,7 @@ class PointConsumptionModal(discord.ui.Modal):
         self.unit_id = unit_id
         self.point_unit = point_unit
 
-        # Points input field
+        # ポイント入力フィールドの設定
         points_label = modal_settings.field_labels.get("points", "消費ポイント")
         points_placeholder = modal_settings.field_placeholders.get("points", "消費するポイント数を入力").format(
             max=available_points
@@ -1039,10 +964,8 @@ class PointConsumptionModal(discord.ui.Modal):
         )
         self.add_item(self.points)
         
-        # Wallet field validation and addition
-        # Wallet field
-        wallet_config = modal_settings.fields.get("wallet")
-        if wallet_config is True:
+        # ウォレットアドレスフィールドの設定（オプション）
+        if modal_settings.fields.get("wallet"):
             wallet_label = modal_settings.field_labels.get("wallet", "ウォレットアドレス")
             wallet_placeholder = modal_settings.field_placeholders.get("wallet", "0x...")
             
@@ -1054,11 +977,8 @@ class PointConsumptionModal(discord.ui.Modal):
                 max_length=42
             )
             self.add_item(self.wallet)
-        else:
-            print(f"[ERROR] Invalid wallet field configuration: {wallet_config}")
-            raise ValueError(f"Wallet field is configured incorrectly. Expected boolean True, got {wallet_config}")
-
-        # Email field (keeping the existing logic)
+        
+        # メールアドレスフィールドの設定（オプション）
         if modal_settings.fields.get("email"):
             email_label = modal_settings.field_labels.get("email", "メールアドレス")
             email_placeholder = modal_settings.field_placeholders.get("email", "example@example.com")
@@ -1069,19 +989,6 @@ class PointConsumptionModal(discord.ui.Modal):
                 required=True
             )
             self.add_item(self.email)
-
-        print("[DEBUG] === Modal Initialization Complete ===")
-
-    async def initialize_wallet(self):
-        """ウォレットアドレスの初期値を設定"""
-        if self.interaction and hasattr(self, 'wallet'):
-            current_wallet = await self.get_latest_wallet_address(
-                self.interaction.client,
-                str(self.interaction.guild_id),
-                str(self.interaction.user.id)
-            )
-            if current_wallet:
-                self.wallet.default = current_wallet
 
     async def on_submit(self, interaction: discord.Interaction):
             """フォーム送信時の処理"""
