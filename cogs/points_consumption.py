@@ -70,6 +70,10 @@ class PointsConsumption(commands.Cog):
     async def _setup_consumption_panel(self, interaction: discord.Interaction, settings: ServerSettings) -> None:
         """消費パネルのセットアップ - 改善版"""
         try:
+            # 応答を遅延させておく
+            if not interaction.response.is_done():
+                await interaction.response.defer(ephemeral=True)
+
             channel = interaction.channel
             if not channel:
                 raise ValueError("Channel not found")
