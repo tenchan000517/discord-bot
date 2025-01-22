@@ -108,6 +108,26 @@ class GachaBot(commands.Bot):
         print(f'Bot is ready in {len(self.guilds)} servers.')
         print(f"Database status: {'Available' if self.db_available else 'Unavailable'}")
 
+        # Loaded cogsの確認を追加
+        print('[DEBUG] Loaded cogs:')
+        for cog in self.cogs:
+            print(f'- {cog}')
+            
+    # ここにエラーハンドラを追加
+    async def on_application_command_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError):
+        print(f'[ERROR] Command error occurred:')
+        print(f'Command: {interaction.command.name if interaction.command else "Unknown"}')
+        print(f'Error: {str(error)}')
+        print(f'Error type: {type(error)}')
+        print(traceback.format_exc())
+
+        if isinstance(error, discord.errors.InteractionResponded):
+            print("Detected stale interaction, attempting to resync...")
+            try:
+                await self.tree.sync(guild=interaction.guild)
+            except Exception as e:
+                print(f"Failed to resync: {e}")
+
         # 全サーバーの設定をデバッグ出力（必要ならループする）
         # for guild in self.guilds:
         #     print(f"[DEBUG] Loading settings for guild {guild.name} (ID: {guild.id})")
