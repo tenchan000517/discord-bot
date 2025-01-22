@@ -15,100 +15,33 @@ class PointsConsumption(commands.Cog):
         self.bot = bot
         self._consumption_locks = {}  # 重複実行防止用
 
-    @app_commands.command(name="setup_consumption", description="ポイント消費機能の初期設定を行います")
-    @app_commands.checks.has_permissions(administrator=True)
-    async def setup_consumption(self, interaction: discord.Interaction):
-        """ポイント消費機能の初期設定とパネル設置"""
+    async def setup_consumption_panel(self, channel_id: str, settings: ServerSettings) -> None:
+        """消費パネルのセットアップ - 複数ポイントプール対応版"""
         try:
-            server_id = str(interaction.guild_id)
-            channel_id = str(interaction.channel_id)
-            
-            # サーバー設定を取得
-            settings = await self.bot.get_server_settings(server_id)
-            if not settings:
-                await interaction.response.send_message(
-                    "サーバー設定の取得に失敗しました。",
-                    ephemeral=True
-                )
-                return
-                
-            # 既存の消費設定をチェック
-            consumption_settings = settings.point_consumption_settings
-            if consumption_settings and consumption_settings.enabled:
-                await interaction.response.send_message(
-                    "このサーバーには既にポイント消費機能が設定されています。\n"
-                    "パネルを再設置する場合は `/consumption_panel` を使用してください。",
-                    ephemeral=True
-                )
-                return
-
-            # 初期設定を作成
-            default_settings = self.bot.settings_manager._create_default_settings(server_id)
-            consumption_settings = default_settings.point_consumption_settings
-            consumption_settings.enabled = True
-            settings.point_consumption_settings = consumption_settings
-
-            # 設定を保存
-            if not await self.bot.settings_manager.update_settings(server_id, settings):
-                await interaction.response.send_message(
-                    "設定の保存に失敗しました。",
-                    ephemeral=True
-                )
-                return
-
-            # パネルを設置
-            await self._setup_consumption_panel(interaction, settings)
-
-        except Exception as e:
-            error_msg = f"エラーが発生しました: {str(e)}\n{traceback.format_exc()}"
-            print(f"[ERROR] Setup failed: {error_msg}")
-            await interaction.followup.send(
-                "設定中にエラーが発生しました。",
-                ephemeral=True
-            )
-
-    async def _setup_consumption_panel(self, interaction: discord.Interaction, settings: ServerSettings) -> None:
-        """消費パネルのセットアップ - 改善版"""
-        try:
-            channel = interaction.channel
+            channel = self.bot.get_channel(int(channel_id))
             if not channel:
-                raise ValueError("Channel not found")
+                print(f"Channel not found: {channel_id}")
+                return
 
             # 消費設定の取得
             consumption_settings = settings.point_consumption_settings
             if not consumption_settings:
-                raise ValueError("Point consumption settings not found")
-
-            # 既存のボットメッセージを削除
-            print("[DEBUG] Cleaning up existing messages...")
-            try:
-                async for message in channel.history(limit=100):
-                    if message.author == self.bot.user:
-                        try:
-                            await message.delete()
-                            print(f"[DEBUG] Deleted message: {message.id}")
-                            await asyncio.sleep(0.5)  # Discord APIの制限を考慮
-                        except Exception as e:
-                            print(f"[DEBUG] Message deletion error: {e}")
-            except Exception as e:
-                print(f"[ERROR] Error while cleaning up messages: {e}")
+                print(f"Point consumption settings not found for channel: {channel_id}")
+                return
 
             # パネルのメッセージを設定
             panel_title = consumption_settings.panel_title
             
             # 利用可能なポイントプールの取得
             point_units = settings.global_settings.point_units
-            print(f"[DEBUG] Found {len(point_units)} point units")
             
-            # Embedの作成
             embed = discord.Embed(
                 title=panel_title,
                 description=consumption_settings.panel_message,
                 color=discord.Color.blue()
             )
-            # embed.set_footer(text=f"Setup at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
-            # Viewの作成
+            # 各ポイントプール用のボタンを作成
             view = discord.ui.View(timeout=None)
             for unit in point_units:
                 button = discord.ui.Button(
@@ -118,73 +51,11 @@ class PointsConsumption(commands.Cog):
                 )
                 view.add_item(button)
 
-            # パネルを送信
-            panel_message = await channel.send(embed=embed, view=view)
-
-            # 完了メッセージを送信
-            complete_embed = discord.Embed(
-                title="セットアップ完了",
-                description="ポイント消費パネルの設置が完了しました。",
-                color=discord.Color.green()
-            )
-            
-            # 一時的な完了メッセージを送信
-            temp_message = await channel.send(embed=complete_embed)
-            await asyncio.sleep(3)
-            await temp_message.delete()
-
-            # インタラクションに応答
-            if not interaction.response.is_done():
-                await interaction.response.send_message(
-                    "ポイント消費パネルの設置が完了しました！",
-                    ephemeral=True
-                )
-            else:
-                await interaction.followup.send(
-                    "ポイント消費パネルの設置が完了しました！",
-                    ephemeral=True
-                )
+            await channel.send(embed=embed, view=view)
 
         except Exception as e:
-            print(f"[ERROR] Error in setup_consumption_panel: {e}")
+            print(f"Error in setup_consumption_panel: {e}")
             print(traceback.format_exc())
-            if not interaction.response.is_done():
-                await interaction.response.send_message(
-                    "パネルの設置中にエラーが発生しました。",
-                    ephemeral=True
-                )
-            else:
-                await interaction.followup.send(
-                    "パネルの設置中にエラーが発生しました。",
-                    ephemeral=True
-                )
-                
-    @app_commands.command(name="consumption_panel", description="ポイント消費パネルを設置します")
-    @app_commands.checks.has_permissions(administrator=True)
-    async def consumption_panel(self, interaction: discord.Interaction):
-        """ポイント消費パネルの設置"""
-        try:
-            server_id = str(interaction.guild_id)
-            
-            # サーバー設定を取得
-            settings = await self.bot.get_server_settings(server_id)
-            if not settings or not settings.point_consumption_settings or not settings.point_consumption_settings.enabled:
-                await interaction.response.send_message(
-                    "ポイント消費機能が設定されていません。先に `/setup_consumption` を実行してください。",
-                    ephemeral=True
-                )
-                return
-
-            # パネルを設置
-            await self._setup_consumption_panel(interaction, settings)
-
-        except Exception as e:
-            error_msg = f"エラーが発生しました: {str(e)}\n{traceback.format_exc()}"
-            print(f"[ERROR] Panel setup failed: {error_msg}")
-            await interaction.followup.send(
-                "パネル設置中にエラーが発生しました。",
-                ephemeral=True
-            )
 
     async def create_consumption_request(
         self,

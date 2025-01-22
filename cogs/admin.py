@@ -7,101 +7,101 @@ class Admin(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.command(
-        name="setup_consumption",
-        description="ポイント消費パネルを設置します"
-    )
-    @app_commands.checks.has_permissions(administrator=True)
-    async def setup_consumption(
-        self,
-        interaction: discord.Interaction,
-        channel: discord.TextChannel
-    ):
-        """ポイント消費パネルのセットアップを行います"""
-        try:
-            print(f"[DEBUG] setup_consumption command initiated")
-            print(f"[DEBUG] User: {interaction.user.id}, Channel: {channel.id}")
+    # @app_commands.command(
+    #     name="setup_consumption",
+    #     description="ポイント消費パネルを設置します"
+    # )
+    # @app_commands.checks.has_permissions(administrator=True)
+    # async def setup_consumption(
+    #     self,
+    #     interaction: discord.Interaction,
+    #     channel: discord.TextChannel
+    # ):
+    #     """ポイント消費パネルのセットアップを行います"""
+    #     try:
+    #         print(f"[DEBUG] setup_consumption command initiated")
+    #         print(f"[DEBUG] User: {interaction.user.id}, Channel: {channel.id}")
             
-            # 処理開始時に応答を遅延
-            await interaction.response.defer(ephemeral=True)
-            print("[DEBUG] Response deferred")
+    #         # 処理開始時に応答を遅延
+    #         await interaction.response.defer(ephemeral=True)
+    #         print("[DEBUG] Response deferred")
             
-            try:
-                print("[DEBUG] Attempting to get server settings...")
-                settings = await self.bot.get_server_settings(str(interaction.guild_id))
-                print(f"[DEBUG] Settings retrieved: {settings is not None}")
+    #         try:
+    #             print("[DEBUG] Attempting to get server settings...")
+    #             settings = await self.bot.get_server_settings(str(interaction.guild_id))
+    #             print(f"[DEBUG] Settings retrieved: {settings is not None}")
                 
-                if not settings or not settings.point_consumption_settings:
-                    print("[DEBUG] Settings validation failed")
-                    await interaction.followup.send(
-                        "サーバーの設定が見つかりません。",
-                        ephemeral=True
-                    )
-                    return
+    #             if not settings or not settings.point_consumption_settings:
+    #                 print("[DEBUG] Settings validation failed")
+    #                 await interaction.followup.send(
+    #                     "サーバーの設定が見つかりません。",
+    #                     ephemeral=True
+    #                 )
+    #                 return
 
-                print("[DEBUG] Checking for PointsConsumption cog...")
-                point_consumption_cog = self.bot.get_cog('PointsConsumption')
-                print(f"[DEBUG] Cog found: {point_consumption_cog is not None}")
+    #             print("[DEBUG] Checking for PointsConsumption cog...")
+    #             point_consumption_cog = self.bot.get_cog('PointsConsumption')
+    #             print(f"[DEBUG] Cog found: {point_consumption_cog is not None}")
 
-                if not point_consumption_cog:
-                    print("[DEBUG] PointsConsumption cog not found")
-                    await interaction.followup.send(
-                        "ポイント消費機能が利用できません。",
-                        ephemeral=True
-                    )
-                    return
+    #             if not point_consumption_cog:
+    #                 print("[DEBUG] PointsConsumption cog not found")
+    #                 await interaction.followup.send(
+    #                     "ポイント消費機能が利用できません。",
+    #                     ephemeral=True
+    #                 )
+    #                 return
 
-                print("[DEBUG] Starting panel setup...")
-                try:
-                    await point_consumption_cog.setup_consumption_panel(
-                        str(channel.id),
-                        settings
-                    )
-                    print("[DEBUG] Panel setup completed successfully")
-                except Exception as panel_error:
-                    print(f"[ERROR] Panel setup failed: {panel_error}")
-                    print(traceback.format_exc())
-                    await interaction.followup.send(
-                        f"パネルの設置中にエラーが発生しました。\nError: {str(panel_error)}",
-                        ephemeral=True
-                    )
-                    return
+    #             print("[DEBUG] Starting panel setup...")
+    #             try:
+    #                 await point_consumption_cog.setup_consumption_panel(
+    #                     str(channel.id),
+    #                     settings
+    #                 )
+    #                 print("[DEBUG] Panel setup completed successfully")
+    #             except Exception as panel_error:
+    #                 print(f"[ERROR] Panel setup failed: {panel_error}")
+    #                 print(traceback.format_exc())
+    #                 await interaction.followup.send(
+    #                     f"パネルの設置中にエラーが発生しました。\nError: {str(panel_error)}",
+    #                     ephemeral=True
+    #                 )
+    #                 return
 
-                # 成功時のメッセージ
-                print("[DEBUG] Sending success message")
-                await interaction.followup.send(
-                    f"✅ ポイント消費パネルを {channel.mention} に設置しました。",
-                    ephemeral=True
-                )
-                print("[DEBUG] Success message sent")
+    #             # 成功時のメッセージ
+    #             print("[DEBUG] Sending success message")
+    #             await interaction.followup.send(
+    #                 f"✅ ポイント消費パネルを {channel.mention} に設置しました。",
+    #                 ephemeral=True
+    #             )
+    #             print("[DEBUG] Success message sent")
 
-            except Exception as inner_error:
-                print(f"[ERROR] Inner error: {inner_error}")
-                print(traceback.format_exc())
-                await interaction.followup.send(
-                    f"⚠️ 処理中にエラーが発生しました。\nError: {str(inner_error)}",
-                    ephemeral=True
-                )
+    #         except Exception as inner_error:
+    #             print(f"[ERROR] Inner error: {inner_error}")
+    #             print(traceback.format_exc())
+    #             await interaction.followup.send(
+    #                 f"⚠️ 処理中にエラーが発生しました。\nError: {str(inner_error)}",
+    #                 ephemeral=True
+    #             )
 
-        except Exception as e:
-            print(f"[ERROR] Outer error in setup_consumption: {e}")
-            print(f"[ERROR] Error type: {type(e)}")
-            print("[ERROR] Full traceback:")
-            print(traceback.format_exc())
+    #     except Exception as e:
+    #         print(f"[ERROR] Outer error in setup_consumption: {e}")
+    #         print(f"[ERROR] Error type: {type(e)}")
+    #         print("[ERROR] Full traceback:")
+    #         print(traceback.format_exc())
             
-            try:
-                if not interaction.response.is_done():
-                    await interaction.response.send_message(
-                        f"⚠️ 重大なエラーが発生しました。\nError: {str(e)}",
-                        ephemeral=True
-                    )
-                else:
-                    await interaction.followup.send(
-                        f"⚠️ 重大なエラーが発生しました。\nError: {str(e)}",
-                        ephemeral=True
-                    )
-            except Exception as final_error:
-                print(f"[ERROR] Failed to send error message: {final_error}")
+    #         try:
+    #             if not interaction.response.is_done():
+    #                 await interaction.response.send_message(
+    #                     f"⚠️ 重大なエラーが発生しました。\nError: {str(e)}",
+    #                     ephemeral=True
+    #                 )
+    #             else:
+    #                 await interaction.followup.send(
+    #                     f"⚠️ 重大なエラーが発生しました。\nError: {str(e)}",
+    #                     ephemeral=True
+    #                 )
+    #         except Exception as final_error:
+    #             print(f"[ERROR] Failed to send error message: {final_error}")
 
     @app_commands.command(
         name="debug_bot",
