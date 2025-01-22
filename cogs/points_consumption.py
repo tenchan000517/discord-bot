@@ -1041,7 +1041,7 @@ class PointsConsumption(commands.Cog):
     
 class PointConsumptionModal(discord.ui.Modal):
     @classmethod
-    async def get_latest_wallet_address(cls, bot, server_id: str, user_id: str) -> str | None:
+    async def get_latest_wallet_address(cls, bot, server_id: str, user_id: str) -> Optional[str]:
         """ユーザーの最新の承認済みウォレットアドレスを取得"""
         try:
             response = await asyncio.to_thread(
