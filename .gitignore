@@ -93,3 +93,5 @@ requirements.txt
 # Backup and log files
 *.log
 *.json
+
+/vcheck/
