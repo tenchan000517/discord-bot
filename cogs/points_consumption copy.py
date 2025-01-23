@@ -602,8 +602,7 @@ class PointsConsumption(commands.Cog):
 
             # カスタムIDから情報を抽出
             try:
-                user_id, points, unit_id, wallet_address = self._parse_button_custom_id(interaction.data['custom_id'])
-
+                user_id, points, unit_id = self._parse_button_custom_id(interaction.data['custom_id'])
                 # print(f"[DEBUG] Parsed button data:")
                 # print(f"  user_id: {user_id}")
                 # print(f"  points: {points}")
@@ -648,6 +647,8 @@ class PointsConsumption(commands.Cog):
                 print(f"  unit_id: {unit_id}")
                 print(f"  source: {str(interaction.user.id)}")
                 
+                wallet_address = latest_request.get('wallet_address')  # ウォレットアドレスを取得
+
                 success = await self.bot.point_manager.consume_points(
                     user_id=user_id,
                     server_id=str(interaction.guild_id),
@@ -1028,10 +1029,10 @@ class PointsConsumption(commands.Cog):
         try:
             prefix = "approve_consume_" if "approve" in custom_id else "cancel_consume_"
             data = custom_id.replace(prefix, "").split('_')
-            if len(data) != 4:
+            if len(data) != 3:
                 raise ValueError(f"Invalid custom_id format: {custom_id}")
-            user_id, points, unit_id, wallet_address = data
-            return user_id, int(points), unit_id, wallet_address
+            user_id, points, unit_id = data
+            return user_id, int(points), unit_id
         except Exception as e:
             print(f"[ERROR] Failed to parse custom_id {custom_id}: {e}")
             raise ValueError(f"Invalid custom_id format: {custom_id}")
@@ -1364,12 +1365,12 @@ class PointConsumptionModal(discord.ui.Modal):
                 view.add_item(discord.ui.Button(
                     label="承認",
                     style=discord.ButtonStyle.success,
-                    custom_id=f"approve_consume_{interaction.user.id}_{self.points.value}_{self.unit_id}_{wallet_address}"
+                    custom_id=f"approve_consume_{interaction.user.id}_{self.points.value}_{self.unit_id}"
                 ))
                 view.add_item(discord.ui.Button(
                     label="キャンセル",
                     style=discord.ButtonStyle.danger,
-                    custom_id=f"cancel_consume_{interaction.user.id}_{self.points.value}_{self.unit_id}_{wallet_address}"
+                    custom_id=f"cancel_consume_{interaction.user.id}_{self.points.value}_{self.unit_id}"
                 ))
 
                 # メンションの準備
