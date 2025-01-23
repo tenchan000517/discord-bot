@@ -26,12 +26,16 @@ class ServerSettingsManager:
         """機能別の設定を更新
         
         cogs\modals.py
+
         cogs\settings\modals\base.py
         cogs\settings\modals\battle_settings.py
         cogs\settings\modals\fortunes_settings.py
         cogs\settings\modals\gacha_items.py
         cogs\settings\modals\gacha_settings.py
         cogs\settings\modals\global_settings.py
+
+        cogs\settings\views\gacha_view.py
+        cogs\settings\views\settings_view.py
         
         """
         try:

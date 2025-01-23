@@ -647,6 +647,8 @@ class PointsConsumption(commands.Cog):
                 print(f"  unit_id: {unit_id}")
                 print(f"  source: {str(interaction.user.id)}")
                 
+                wallet_address = latest_request.get('wallet_address')  # ウォレットアドレスを取得
+
                 success = await self.bot.point_manager.consume_points(
                     user_id=user_id,
                     server_id=str(interaction.guild_id),
@@ -716,9 +718,7 @@ class PointsConsumption(commands.Cog):
                         key=lambda x: x['timestamp'],
                         reverse=True
                     )[0]
-                        
-                    wallet_address = latest_request.get('wallet_address')  # ウォレットアドレスを取得
-
+                    
                     # print("[DEBUG] Updating consumption status")
                     await self.bot.db.update_consumption_status(
                         str(interaction.guild_id),
@@ -788,14 +788,9 @@ class PointsConsumption(commands.Cog):
     async def handle_cancel_button(self, interaction: discord.Interaction):
         """キャンセルボタンのハンドラー"""
         print("[DEBUG] === Cancel button handler started ===")
-        print(f"[DEBUG] Interaction type: {type(interaction)}")
-        print(f"[DEBUG] Interaction fields: {dir(interaction)}")
         try:
-            print(f"[DEBUG] Guild ID: {interaction.guild_id}")
-            print(f"[DEBUG] User ID: {interaction.user.id}")
-            print(f"[DEBUG] Custom ID: {interaction.data.get('custom_id')}")
-            print(f"[DEBUG] Full interaction data: {interaction.data}")
-                    
+            await interaction.response.defer(ephemeral=True)
+
             print("[DEBUG] === Server Settings Retrieval ===")
             # サーバー設定の取得
             settings = await self.bot.get_server_settings(str(interaction.guild_id))

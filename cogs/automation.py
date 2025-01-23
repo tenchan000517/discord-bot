@@ -72,73 +72,73 @@ class Automation(commands.Cog):
             print(f"Error processing member update automation: {e}")
             print(traceback.format_exc())
 
-    async def create_rule(self, interaction: discord.Interaction):
-        modal = RuleModal()
-        await interaction.response.send_modal(modal)
-        await modal.wait()
+    # async def create_rule(self, interaction: discord.Interaction):
+    #     modal = RuleModal()
+    #     await interaction.response.send_modal(modal)
+    #     await modal.wait()
         
-        result = await modal.on_submit(interaction)
-        if result:
-            rule = await self.automation_manager.create_rule(
-                str(interaction.guild_id),
-                result['name'],
-                result['description']
-            )
+    #     result = await modal.on_submit(interaction)
+    #     if result:
+    #         rule = await self.automation_manager.create_rule(
+    #             str(interaction.guild_id),
+    #             result['name'],
+    #             result['description']
+    #         )
             
-            if rule:
-                await interaction.followup.send(f"ルール「{result['name']}」を作成しました。")
-            else:
-                await interaction.followup.send("ルールの作成に失敗しました。")
+    #         if rule:
+    #             await interaction.followup.send(f"ルール「{result['name']}」を作成しました。")
+    #         else:
+    #             await interaction.followup.send("ルールの作成に失敗しました。")
 
-    @app_commands.command(name="automation", description="自動化ルールを管理します")
-    @app_commands.checks.has_permissions(administrator=True)
-    async def automation(self, interaction: discord.Interaction, action: str, rule_id: Optional[str] = None):
-        try:
-            if action == "create":
-                await self.create_rule(interaction)
+    # @app_commands.command(name="automation", description="自動化ルールを管理します")
+    # @app_commands.checks.has_permissions(administrator=True)
+    # async def automation(self, interaction: discord.Interaction, action: str, rule_id: Optional[str] = None):
+    #     try:
+    #         if action == "create":
+    #             await self.create_rule(interaction)
                 
-            elif action == "list":
-                rules = await self.automation_manager.get_server_rules(str(interaction.guild_id))
-                if not rules:
-                    await interaction.response.send_message("ルールが設定されていません。")
-                    return
+    #         elif action == "list":
+    #             rules = await self.automation_manager.get_server_rules(str(interaction.guild_id))
+    #             if not rules:
+    #                 await interaction.response.send_message("ルールが設定されていません。")
+    #                 return
                 
-                embed = discord.Embed(title="自動化ルール一覧", color=discord.Color.blue())
-                for rule in rules:
-                    status = "✅ 有効" if rule.enabled else "❌ 無効"
-                    embed.add_field(
-                        name=f"{rule.name} ({status})",
-                        value=f"ID: {rule.id}\n説明: {rule.description}",
-                        inline=False
-                    )
-                await interaction.response.send_message(embed=embed)
+    #             embed = discord.Embed(title="自動化ルール一覧", color=discord.Color.blue())
+    #             for rule in rules:
+    #                 status = "✅ 有効" if rule.enabled else "❌ 無効"
+    #                 embed.add_field(
+    #                     name=f"{rule.name} ({status})",
+    #                     value=f"ID: {rule.id}\n説明: {rule.description}",
+    #                     inline=False
+    #                 )
+    #             await interaction.response.send_message(embed=embed)
                 
-            elif action == "delete" and rule_id:
-                success = await self.automation_manager.delete_rule(str(interaction.guild_id), rule_id)
-                if success:
-                    await interaction.response.send_message(f"ルール（ID: {rule_id}）を削除しました。")
-                else:
-                    await interaction.response.send_message("ルールの削除に失敗しました。")
+    #         elif action == "delete" and rule_id:
+    #             success = await self.automation_manager.delete_rule(str(interaction.guild_id), rule_id)
+    #             if success:
+    #                 await interaction.response.send_message(f"ルール（ID: {rule_id}）を削除しました。")
+    #             else:
+    #                 await interaction.response.send_message("ルールの削除に失敗しました。")
                     
-            elif action == "toggle" and rule_id:
-                success = await self.automation_manager.toggle_rule(str(interaction.guild_id), rule_id)
-                if success:
-                    await interaction.response.send_message(f"ルール（ID: {rule_id}）の状態を切り替えました。")
-                else:
-                    await interaction.response.send_message("ルールの状態変更に失敗しました。")
+    #         elif action == "toggle" and rule_id:
+    #             success = await self.automation_manager.toggle_rule(str(interaction.guild_id), rule_id)
+    #             if success:
+    #                 await interaction.response.send_message(f"ルール（ID: {rule_id}）の状態を切り替えました。")
+    #             else:
+    #                 await interaction.response.send_message("ルールの状態変更に失敗しました。")
                     
-            else:
-                await interaction.response.send_message(
-                    "使用可能なコマンド:\n"
-                    "/automation create: 新しいルールを作成\n"
-                    "/automation list: ルール一覧を表示\n"
-                    "/automation delete <rule_id>: ルールを削除\n"
-                    "/automation toggle <rule_id>: ルールの有効/無効を切り替え"
-                )
-        except Exception as e:
-            print(f"Error in automation command: {e}")
-            print(traceback.format_exc())
-            await interaction.followup.send("コマンドの実行中にエラーが発生しました。", ephemeral=True)
+    #         else:
+    #             await interaction.response.send_message(
+    #                 "使用可能なコマンド:\n"
+    #                 "/automation create: 新しいルールを作成\n"
+    #                 "/automation list: ルール一覧を表示\n"
+    #                 "/automation delete <rule_id>: ルールを削除\n"
+    #                 "/automation toggle <rule_id>: ルールの有効/無効を切り替え"
+    #             )
+    #     except Exception as e:
+    #         print(f"Error in automation command: {e}")
+    #         print(traceback.format_exc())
+    #         await interaction.followup.send("コマンドの実行中にエラーが発生しました。", ephemeral=True)
 
     # @app_commands.command(name="automation-history", description="自動化ルールの実行履歴を表示します")
     # @app_commands.checks.has_permissions(administrator=True)
