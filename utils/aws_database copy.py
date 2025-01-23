@@ -159,16 +159,7 @@ class AWSDatabase:
             print(f"Error in update_user_points: {e}")
             return False
 
-    async def update_feature_points(
-        self, 
-        user_id: str, 
-        server_id: str, 
-        points: int, 
-        unit_id: str = "1", 
-        username: str = None,  # Discordのユーザーネーム
-        wallet_address: str = None, 
-        email: str = None
-    ) -> bool:
+    async def update_feature_points(self, user_id: str, server_id: str, points: int, unit_id: str = "1") -> bool:
         """
         ユーザーのポイントを更新する
 
@@ -177,12 +168,22 @@ class AWSDatabase:
             server_id (str): サーバーのDiscord ID
             points (int): 更新後の最終的なポイント値
             unit_id (str, optional): ポイントユニットのID. デフォルトは "1"
-            username (str, optional): Discordのユーザーネーム
-            wallet_address (str, optional): ユーザーのウォレットアドレス. デフォルトは None
-            email (str, optional): ユーザーのメールアドレス. デフォルトは None
 
         Returns:
             bool: 更新が成功したかどうか
+
+        Note:
+            - pointsパラメータには更新後の最終的なポイント値を渡すこと
+            - 例:現在のポイントが100で、50ポイント消費する場合は、points=50を渡す
+            - 新規ユーザーの場合は新しいレコードを作成
+            - 既存ユーザーの場合は指定されたポイント値で更新
+
+        self
+        update_user_points
+
+        utils\point_manager.py
+        update_points
+
         """
         try:
             # パーティションキーを生成
@@ -199,9 +200,6 @@ class AWSDatabase:
                     'server_id': str(server_id),
                     'unit_id': unit_id,
                     'points': Decimal(str(points)),
-                    'username': username,  # ユーザーネームは必須で初期化
-                    'wallet_address': wallet_address,  # Noneで初期化される
-                    'email': email,  # Noneで初期化される
                     'created_at': datetime.now(pytz.timezone('Asia/Tokyo')).isoformat(),
                     'updated_at': datetime.now(pytz.timezone('Asia/Tokyo')).isoformat()
                 }
@@ -209,14 +207,6 @@ class AWSDatabase:
                 # 既存ユーザーの場合、ポイントと更新日時を更新
                 current_data['points'] = Decimal(str(points))
                 current_data['updated_at'] = datetime.now(pytz.timezone('Asia/Tokyo')).isoformat()
-
-                # 渡された場合にのみオプションフィールドを更新
-                if wallet_address:
-                    current_data['wallet_address'] = wallet_address
-                if email:
-                    current_data['email'] = email
-                if username:
-                    current_data['username'] = username
 
             # DynamoDBにデータを保存
             await asyncio.to_thread(
@@ -231,7 +221,6 @@ class AWSDatabase:
             print(f"Error updating points: {e}")
             print(traceback.format_exc())
             return False
-
 
     def _create_pk(self, user_id: str, server_id: str, unit_id: str = "1") -> str:
         """

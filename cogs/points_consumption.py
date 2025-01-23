@@ -652,7 +652,8 @@ class PointsConsumption(commands.Cog):
                     server_id=str(interaction.guild_id),
                     points=points,  # 正の値をそのまま渡す
                     unit_id=unit_id,
-                    source=str(interaction.user.id)  # 承認者ID
+                    source=str(interaction.user.id),
+                    wallet_address=wallet_address  # ウォレットアドレスを追加
                 )
                 # print(f"[DEBUG] Point consumption result: {success}")
 
@@ -716,6 +717,8 @@ class PointsConsumption(commands.Cog):
                         reverse=True
                     )[0]
                         
+                    wallet_address = latest_request.get('wallet_address')  # ウォレットアドレスを取得
+
                     # print("[DEBUG] Updating consumption status")
                     await self.bot.db.update_consumption_status(
                         str(interaction.guild_id),

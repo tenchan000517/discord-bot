@@ -26,26 +26,26 @@ class AutomationManager:
             print(traceback.format_exc())
             return []
 
-    async def create_rule(self, server_id: str, name: str, description: str) -> Optional[AutomationRule]:
-        """新しいルールを作成"""
-        try:
-            rule = AutomationRule.create_new(server_id, name, description)
-            success = await self.db.save_automation_rule(rule.to_dict())
-            return rule if success else None
-        except Exception as e:
-            print(f"Error creating rule: {e}")
-            print(traceback.format_exc())
-            return None
+    # async def create_rule(self, server_id: str, name: str, description: str) -> Optional[AutomationRule]:
+    #     """新しいルールを作成"""
+    #     try:
+    #         rule = AutomationRule.create_new(server_id, name, description)
+    #         success = await self.db.save_automation_rule(rule.to_dict())
+    #         return rule if success else None
+    #     except Exception as e:
+    #         print(f"Error creating rule: {e}")
+    #         print(traceback.format_exc())
+    #         return None
 
-    async def update_rule(self, rule: AutomationRule) -> bool:
-        """ルールを更新"""
-        try:
-            rule.updated_at = datetime.now(pytz.UTC).isoformat()
-            return await self.db.save_automation_rule(rule.to_dict())
-        except Exception as e:
-            print(f"Error updating rule: {e}")
-            print(traceback.format_exc())
-            return False
+    # async def update_rule(self, rule: AutomationRule) -> bool:
+    #     """ルールを更新"""
+    #     try:
+    #         rule.updated_at = datetime.now(pytz.UTC).isoformat()
+    #         return await self.db.save_automation_rule(rule.to_dict())
+    #     except Exception as e:
+    #         print(f"Error updating rule: {e}")
+    #         print(traceback.format_exc())
+    #         return False
         
     async def process_points_update(self, user_id: str, server_id: str, points: int, unit_id: str = "1"):
         """

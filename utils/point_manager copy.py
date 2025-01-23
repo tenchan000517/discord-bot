@@ -72,32 +72,13 @@ class PointManager:
             print(traceback.format_exc())
             return 0
 
-    async def update_points(
-        self, 
-        user_id: str, 
-        server_id: str, 
-        points: int, 
-        unit_id: str = "1", 
-        source: str = None,
-        wallet_address: str = None,
-        username: str = None  # 新たに受け取る
-    ) -> bool:
+    async def update_points(self, user_id: str, server_id: str, points: int, unit_id: str = "1", source: str = None) -> bool:
         """
         ポイントを増減させる（増加は正の値、減少は負の値）
-
         Args:
-            user_id (str): ユーザーID
-            server_id (str): サーバーID
-            points (int): 増減させるポイント量（正の値で増加、負の値で減少）
-            unit_id (str, optional): ポイントユニットID. デフォルトは "1"
-            source (str, optional): ポイント変動の発生元（例: 承認者のユーザーID）
-            wallet_address (str, optional): ユーザーのウォレットアドレス. デフォルトは None
-
+            points: 増減させるポイント量（正の値で増加、負の値で減少）
         Returns:
             bool: 操作が成功したかどうか
-
-        Raises:
-            Exception: 処理中に予期しないエラーが発生した場合
         """
         try:
             # 現在のポイントを取得
@@ -110,15 +91,9 @@ class PointManager:
             if new_total < 0:
                 return False
                 
-            # ポイントを更新 (ウォレットアドレスを含めて保存)
-            success = await self.db.update_feature_points(
-                user_id=user_id, 
-                server_id=server_id, 
-                points=new_total, 
-                unit_id=unit_id,
-                wallet_address=wallet_address,
-                username=username  # 渡す
-            )            
+            # ポイントを更新
+            success = await self.db.update_feature_points(user_id, server_id, new_total, unit_id)
+            
             if success:
 
                 # サーバー設定を取得してポイント単位名を決定
@@ -214,72 +189,42 @@ class PointManager:
         except Exception as e:
             print(f"Error in point consumption notification: {e}")
 
-    async def consume_points(
-        self, 
-        server_id: str, 
-        user_id: str, 
-        points: int, 
-        reason: str = "ポイント消費", 
-        unit_id: str = "1", 
-        source: str = None, 
-        wallet_address: str = None
-    ) -> bool:
+    async def consume_points(self, server_id: str, user_id: str, points: int, reason: str = "ポイント消費", unit_id: str = "1", source: str = None) -> bool:
         """
         ポイントを消費する
-
+        
         Args:
             server_id (str): サーバーID
             user_id (str): ユーザーID
-            points (int): 消費するポイント量（正の整数値）
+            points (int): 消費するポイント量
             reason (str, optional): 消費理由. デフォルトは "ポイント消費"
             unit_id (str, optional): ポイントユニットID. デフォルトは "1"
-            source (str, optional): ポイント変動の発生元（例: 承認者のユーザーID）. デフォルトは None
-            wallet_address (str, optional): ユーザーのウォレットアドレス. デフォルトは None
+            source (str, optional): ポイント変動元. デフォルトはNone
 
         Returns:
             bool: 操作が成功したかどうか
-
-        Raises:
-            Exception: 処理中に予期しないエラーが発生した場合
         """
         try:
             # 現在のポイントを取得
             current_points = await self.get_points(server_id, user_id, unit_id)
-
+            
             # ポイント不足チェック
             if current_points < points:
-                print(f"[DEBUG] User {user_id} has insufficient points. Required: {points}, Available: {current_points}")
                 return False
 
-            # 新しいポイントを計算
+            # 新しいポイントを計算して更新
             new_points = current_points - points
-
-            # ポイントの更新
             success = await self.update_points(
                 user_id=user_id, 
                 server_id=server_id, 
-                points=new_points, 
-                unit_id=unit_id, 
-                source=source, 
-                wallet_address=wallet_address  # ウォレットアドレスを追加
+                points=new_points,
+                unit_id=unit_id,
+                source=source
             )
 
-            if not success:
-                print(f"[DEBUG] Failed to update points for user {user_id} in server {server_id}")
-                return False
-
-            # ログ出力（デバッグ用）
-            print(f"[INFO] Points successfully consumed for user {user_id} in server {server_id}.")
-            print(f"  - Points consumed: {points}")
-            print(f"  - New balance: {new_points}")
-            print(f"  - Unit ID: {unit_id}")
-            print(f"  - Source: {source}")
-            if wallet_address:
-                print(f"  - Wallet Address: {wallet_address}")
-
-            return True
+            return success
 
         except Exception as e:
-            print(f"[ERROR] Error in consume_points: {e}")
+            print(f"Error in consume_points: {e}")
             print(traceback.format_exc())
             return False

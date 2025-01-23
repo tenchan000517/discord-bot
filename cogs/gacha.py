@@ -144,7 +144,8 @@ class GachaView(discord.ui.View):
         try:
             user_id = str(interaction.user.id)
             server_id = str(interaction.guild_id)
-            
+            username = str(interaction.user.name)  # ユーザーネームを取得
+
             # サーバー設定を取得
             settings = await self.bot.get_server_settings(server_id)
             if not settings or not settings.global_settings.features_enabled.get('gacha', True):
@@ -247,7 +248,8 @@ class GachaView(discord.ui.View):
                 server_id,
                 points_to_add,  # 直接増加量を指定
                 point_unit_id,
-                PointSource.GACHA
+                PointSource.GACHA,
+                username=username  # ここでユーザーネームを渡す
             )
 
             # 更新後のポイントを取得
