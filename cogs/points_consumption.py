@@ -829,12 +829,13 @@ class PointsConsumption(commands.Cog):
             try:
                 custom_id = interaction.data['custom_id']
                 print(f"[DEBUG] Raw custom_id: {custom_id}")
-                user_id, points, unit_id = self._parse_button_custom_id(custom_id)
+                user_id, points, unit_id, wallet_address = self._parse_button_custom_id(custom_id)
                 print(f"[DEBUG] Parsed data:")
                 print(f"  user_id: {user_id}")
                 print(f"  points: {points}")
                 print(f"  unit_id: {unit_id}")
-                
+                print(f"  wallet_address: {wallet_address}")
+
                 print("[DEBUG] === Point Unit Validation ===")
                 point_unit = next(
                     (unit for unit in settings.global_settings.point_units if unit.unit_id == unit_id),

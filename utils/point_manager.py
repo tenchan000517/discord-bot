@@ -258,7 +258,7 @@ class PointManager:
             success = await self.update_points(
                 user_id=user_id, 
                 server_id=server_id, 
-                points=new_points, 
+                points=-points,  # ここをマイナスに
                 unit_id=unit_id, 
                 source=source, 
                 wallet_address=wallet_address  # ウォレットアドレスを追加
